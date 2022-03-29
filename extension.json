@@ -1,0 +1,76 @@
+{
+	"name": "WikiVideos",
+	"version": "1.0",
+	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
+	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
+	"descriptionmsg": "wikivideos-desc",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.31.0"
+	},
+	"MessagesDirs": {
+		"WikiVideos": [
+			"i18n"
+		]
+	},
+	"AutoloadClasses": {
+		"WikiVideos": "WikiVideos.php"
+	},
+	"Hooks": {
+		"BeforePageDisplay": "WikiVideos::onBeforePageDisplay",
+		"ParserFirstCallInit": "WikiVideos::onParserFirstCallInit"
+	},
+	"ResourceModules": {
+		"ext.WikiVideos": {
+			"scripts": "WikiVideos.js",
+			"targets": [
+				"desktop",
+				"mobile"
+			]
+		},
+		"ext.WikiVideos.styles": {
+			"styles": "WikiVideos.css",
+			"targets": [
+				"desktop",
+				"mobile"
+			]
+		}
+	},
+	"ResourceFileModulePaths": {
+		"localBasePath": "",
+		"remoteExtPath": "WikiVideos"
+	},
+	"config": {
+		"GoogleCloudSDK": {
+			"value": ""
+		},
+		"WikiVideosMaxWidth": {
+			"value": 1280
+		},
+		"WikiVideosMaxHeight": {
+			"value": 1280
+		},
+		"WikiVideosControls": {
+			"value": true
+		},
+		"WikiVideosAutoplay": {
+			"value": false
+		},
+		"WikiVideosChapters": {
+			"value": true
+		},
+		"WikiVideosCaptions": {
+			"value": false
+		},
+		"WikiVideosVoiceLanguage": {
+			"value": "en-US"
+		},
+		"WikiVideosVoiceGender": {
+			"value": "MALE"
+		},
+		"WikiVideosVoiceName": {
+			"value": "en-US-Standard-A"
+		}
+	},
+	"manifest_version": 2
+}

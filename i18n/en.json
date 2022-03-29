@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Sophivorus"
+		]
+	},
+	"wikivideos-desc": "Turn wikitext into videos.",
+	"wikivideos-error": "Something went wrong while making the video."
+}

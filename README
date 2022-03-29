@@ -1,0 +1,37 @@
+# WikiVideos
+
+https://cloud.google.com/text-to-speech/docs/voices
+
+WikiVideos is based on an algorithm
+that translates plain-text instructions
+into videos.
+
+Here's a simple example:
+
+<wikivideo>
+File:Sunset.jpg
+The sun sets
+File:Moonrise.jpg
+and the moon rises.
+</wikivideo>
+
+Put in words, the wikivideos algorithm:
+
+# Displays the first image while the first text is read (using Google's text-to-speech cloud service)
+# Displays the second image while the second text is read
+
+This simple idea can be extended in many ways. For example, here's a more elaborate wikivideo:
+
+<wikivideo subtitles="yes">
+File:Sunset.jpg
+The sun sets
+1
+File:Moonrise.jpg
+and the moon rises.
+2
+</wikivideo>
+
+While this syntax has its limits, it also has many advantages:
+
+* It's simple and allows anyone with a browser to create videos.
+* Videos can be easily improved by others.

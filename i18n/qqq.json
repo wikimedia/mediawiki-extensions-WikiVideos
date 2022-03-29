@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Sophivorus"
+		]
+	},
+	"wikivideos-desc": "{{desc|name=WikiVideos|url=https://www.mediawiki.org/wiki/Extension:WikiVideos}}",
+	"wikivideos-error": "Generic error message when something went wrong while making the video."
+}

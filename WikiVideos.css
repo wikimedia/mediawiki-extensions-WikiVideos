@@ -1,0 +1,8 @@
+.wikivideo {
+    background: black;
+    max-width: 100%;
+}
+.wikivideo-chapter-time {
+    color: blue;
+    cursor: pointer;
+}
