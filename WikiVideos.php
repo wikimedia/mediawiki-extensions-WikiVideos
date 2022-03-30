@@ -28,7 +28,7 @@ class WikiVideos {
 	 * @return HTML of the wikivideo
 	 */
 	public static function onWikivideoTag( $input, array $args, Parser $parser, PPFrame $frame ) {
-		global $wgExtensionAssetsPath,
+		global $wgUploadPath,
 			$wgWikiVideosControls,
 			$wgWikiVideosAutoplay,
 			$wgWikiVideosCaptions,
@@ -45,7 +45,7 @@ class WikiVideos {
 		$videoHeight = $videoSize[1];
 		$attribs = [
 			'id' => $videoID,
-			'src' => "$wgExtensionAssetsPath/WikiVideos/videos/$videoID.mp4",
+			'src' => "$wgUploadPath/wikivideos/videos/$videoID.mp4",
 			'class' => 'wikivideo',
 			'width' => $args['width'] ?? ( $videoWidth > $videoHeight ? $videoWidth : 'auto' ),
 			'height' => $args['height'] ?? ( $videoHeight > $videoWidth ? $videoHeight : 'auto' ),
@@ -58,13 +58,13 @@ class WikiVideos {
 		$tracks = Html::element( 'track', [
 			'default' => $captions ? true : false,
 			'kind' => 'captions',
-			'src' => "$wgExtensionAssetsPath/WikiVideos/tracks/$videoID.vtt"
+			'src' => "$wgUploadPath/wikivideos/tracks/$videoID.vtt"
 		] );
 		$chapters = $args['chapters'] ?? $wgWikiVideosChapters;
 		$tracks .= Html::element( 'track', [
 			'default' => $chapters ? true : false,
 			'kind' => 'chapters',
-			'src' => "$wgExtensionAssetsPath/WikiVideos/tracks/$videoID.vtt"
+			'src' => "$wgUploadPath/wikivideos/tracks/$videoID.vtt"
 		] );
 		$html = Html::rawElement( 'video', $attribs, $tracks );
 		if ( $chapters ) {
@@ -95,8 +95,11 @@ class WikiVideos {
 					continue;
 				}
 				if ( !$name ) {
-					if ( preg_match( '/^[Ff]ile:/', $value ) ) {
+					$title = Title::newFromText( $value, NS_FILE );
+					$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $title );
+					if ( $file ) {
 						$name = 0;
+						$value = $title->getFullText();
 					} else {
 						$name = 1;
 					}
@@ -135,10 +138,20 @@ class WikiVideos {
 	 * @return string ID of the resulting MP4 file
 	 */
 	public static function getVideoID( $contents, $options = [] ) {
-		global $IP, $wgFFmpegLocation, $wgFFprobeLocation;
+		global $wgUploadDirectory, $wgFFmpegLocation, $wgFFprobeLocation;
+
+		if ( !file_exists( "$wgUploadDirectory/wikivideos" ) ) {
+			mkdir( "$wgUploadDirectory/wikivideos" );
+			mkdir( "$wgUploadDirectory/wikivideos/videos" );
+			mkdir( "$wgUploadDirectory/wikivideos/audios" );
+			mkdir( "$wgUploadDirectory/wikivideos/tracks" );
+			file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", 0 );
+			$image = imagecreatetruecolor( 1, 1 );
+			imagejpeg( $image, "$wgUploadDirectory/wikivideos/black-pixel.jpg" );
+		}
 
 		$videoID = md5( json_encode( [ $contents, $options ] ) );
-		$videoPath = "$IP/extensions/WikiVideos/videos/$videoID.mp4";
+		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoID.mp4";
 		if ( file_exists( $videoPath ) ) {
 			return $videoID;
 		}
@@ -161,18 +174,18 @@ class WikiVideos {
 			$afterAudioID = self::getAudioID( $timeAfterAudio );
 			$videoDuration = 0;
 			if ( $beforeAudioID ) {
-				$audioText .= "file $IP/extensions/WikiVideos/audios/$beforeAudioID.mp3" . PHP_EOL;
+				$audioText .= "file $wgUploadDirectory/wikivideos/audios/$beforeAudioID.mp3" . PHP_EOL;
 				$audioText .= "duration $timeBeforeAudio" . PHP_EOL;
 				$videoDuration += $timeBeforeAudio;
 			}
 			if ( $textAudioID ) {
-				$audioDuration = exec( "$wgFFprobeLocation -i $IP/extensions/WikiVideos/audios/$textAudioID.mp3 -show_format -v quiet | sed -n 's/duration=//p'" );
-				$audioText .= "file $IP/extensions/WikiVideos/audios/$textAudioID.mp3" . PHP_EOL;
+				$audioDuration = exec( "$wgFFprobeLocation -i $wgUploadDirectory/wikivideos/audios/$textAudioID.mp3 -show_format -v quiet | sed -n 's/duration=//p'" );
+				$audioText .= "file $wgUploadDirectory/wikivideos/audios/$textAudioID.mp3" . PHP_EOL;
 				$audioText .= "duration $audioDuration" . PHP_EOL;
 				$videoDuration += $audioDuration;
 			}
 			if ( $afterAudioID ) {
-				$audioText .= "file $IP/extensions/WikiVideos/audios/$beforeAudioID.mp3" . PHP_EOL;
+				$audioText .= "file $wgUploadDirectory/wikivideos/audios/$beforeAudioID.mp3" . PHP_EOL;
 				$audioText .= "duration $timeAfterAudio" . PHP_EOL;
 				$videoDuration += $timeAfterAudio;
 			}
@@ -188,27 +201,27 @@ class WikiVideos {
 			}
 			$timeElapsed += $videoDuration;
 
-			$fileTitle = Title::newFromText( $file );
+			$fileTitle = Title::newFromText( $file, NS_FILE );
 			$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $fileTitle );
 			if ( $file ) {
 				$filePath = $file->getRel();
-				$filePath = "$IP/images/$filePath";
+				$filePath = "$wgUploadDirectory/$filePath";
 			} else {
-				$filePath = "$IP/extensions/WikiVideos/resources/black.jpg";;
+				$filePath = "$wgUploadDirectory/wikivideos/black-pixel.jpg";
 			}
 			$videoText .= "file $filePath" . PHP_EOL;
 			$videoText .= "duration $videoDuration" . PHP_EOL;
 		}
 
 		// Create the files
-		$audioFile = "$IP/extensions/WikiVideos/audios/$videoID.txt";
+		$audioFile = "$wgUploadDirectory/wikivideos/audios/$videoID.txt";
 		file_put_contents( $audioFile, $audioText );
 
-		$trackFile = "$IP/extensions/WikiVideos/tracks/$videoID.vtt";
+		$trackFile = "$wgUploadDirectory/wikivideos/tracks/$videoID.vtt";
 		file_put_contents( $trackFile, $trackText );
 
 		$videoText .= "file $filePath"; // Due to a ffmpeg quirk, the last image needs to be specified twice, see https://trac.ffmpeg.org/wiki/Slideshow
-		$videoFile = "$IP/extensions/WikiVideos/videos/$videoID.txt";
+		$videoFile = "$wgUploadDirectory/wikivideos/videos/$videoID.txt";
 		file_put_contents( $videoFile, $videoText );
 
 		// Make the video
@@ -233,9 +246,10 @@ class WikiVideos {
 	 * @return string Absolute path to the resulting MP3 file
 	 */
 	public static function getAudioID( $text, $options = [] ) {
-		global $IP,
+		global $wgUploadDirectory,
 			$wgFFmpegLocation,
 			$wgGoogleCloudSDK,
+			$wgGoogleTextToSpeechMaxCharsPerMonth,
 			$wgWikiVideosVoiceLanguage,
 			$wgWikiVideosVoiceGender,
 			$wgWikiVideosVoiceName;
@@ -248,7 +262,7 @@ class WikiVideos {
 		// use FFMPEG to make a silent MP3 of that many seconds
 		if ( is_numeric( $text ) ) {
 			$audioID = md5( $text );
-			$audioFile = "$IP/extensions/WikiVideos/audios/$audioID.mp3";
+			$audioFile = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
 			if ( !file_exists( $audioFile ) ) {
 				exec( "$wgFFmpegLocation -f lavfi -i anullsrc=r=44100:cl=mono -t $text -q:a 9 -acodec libmp3lame $audioFile" );
 			}
@@ -266,9 +280,18 @@ class WikiVideos {
 		}
 		ksort( $options );
 		$audioID = md5( json_encode( [ $text, $options ] ) );
-		$audioFile = "$IP/extensions/WikiVideos/audios/$audioID.mp3";
+		$audioFile = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
 		if ( file_exists( $audioFile ) ) {
 			return $audioID;
+		}
+
+		// Keep track of the translated characters
+		$chars = file_get_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars" );
+		$chars += strlen( $text );
+		if ( $chars > $wgGoogleTextToSpeechMaxCharsPerMonth ) {
+			return;
+		} else {
+			file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", $chars );
 		}
 
 		// Build the request
@@ -304,7 +327,7 @@ class WikiVideos {
 		$data = json_decode( $json, true );
 		//var_dump( $data ); exit; // Uncomment to debug
 		$content = $data['audioContent'];
-		$audioText = "$IP/extensions/WikiVideos/audios/$audioID.txt";
+		$audioText = "$wgUploadDirectory/wikivideos/audios/$audioID.txt";
 		file_put_contents( $audioText, $content );
 		exec( "base64 $audioText -d > $audioFile" );
 		unlink( $audioText ); // Clean up
@@ -319,7 +342,7 @@ class WikiVideos {
 	 * @return array Video Width and height
 	 */
 	public static function getVideoSize( $contents ) {
-		global $IP, $wgWikiVideosMaxWidth, $wgWikiVideosMaxHeight;
+		global $wgUploadDirectory, $wgWikiVideosMaxWidth, $wgWikiVideosMaxHeight;
 		$videoWidth = 0;
 		$videoHeight = 0;
 		foreach ( $contents as $content ) {
@@ -333,7 +356,7 @@ class WikiVideos {
 				continue;
 			}
 			$filePath = $file->getRel();
-			$filePath = "$IP/images/$filePath";
+			$filePath = "$wgUploadDirectory/$filePath";
 			$imageSize = getimagesize( $filePath );
 			$imageWidth = $imageSize[0];
 			$imageHeight = $imageSize[1];
@@ -399,8 +422,8 @@ class WikiVideos {
 	 * @return string HTML of the chapters list
 	 */
 	public static function getChaptersHTML( $videoID ) {
-		global $IP;
-		$track = "$IP/extensions/WikiVideos/tracks/$videoID.vtt";
+		global $wgUploadDirectory;
+		$track = "$wgUploadDirectory/wikivideos/tracks/$videoID.vtt";
 		if ( !file_exists( $track ) ) {
 			return;
 		}

@@ -1,6 +1,6 @@
 {
 	"name": "WikiVideos",
-	"version": "1.0",
+	"version": "1.1",
 	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
 	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
 	"descriptionmsg": "wikivideos-desc",
@@ -43,6 +43,9 @@
 	"config": {
 		"GoogleCloudSDK": {
 			"value": ""
+		},
+		"GoogleTextToSpeechMaxCharsPerMonth": {
+			"value": 4000000
 		},
 		"WikiVideosMaxWidth": {
 			"value": 1280
