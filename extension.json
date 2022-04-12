@@ -4,6 +4,7 @@
 	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
 	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
 	"descriptionmsg": "wikivideos-desc",
+	"license-name": "GPL-3.0-or-later",
 	"type": "other",
 	"requires": {
 		"MediaWiki": ">= 1.31.0"
@@ -42,9 +43,9 @@
 	},
 	"config": {
 		"GoogleCloudSDK": {
-			"value": ""
+			"value": "gcloud"
 		},
-		"GoogleTextToSpeechMaxCharsPerMonth": {
+		"GoogleTextToSpeechMaxChars": {
 			"value": 4000000
 		},
 		"WikiVideosMaxWidth": {

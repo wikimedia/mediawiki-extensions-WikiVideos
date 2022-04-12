@@ -249,7 +249,7 @@ class WikiVideos {
 		global $wgUploadDirectory,
 			$wgFFmpegLocation,
 			$wgGoogleCloudSDK,
-			$wgGoogleTextToSpeechMaxCharsPerMonth,
+			$wgGoogleTextToSpeechMaxChars,
 			$wgWikiVideosVoiceLanguage,
 			$wgWikiVideosVoiceGender,
 			$wgWikiVideosVoiceName;
@@ -288,11 +288,10 @@ class WikiVideos {
 		// Keep track of the translated characters
 		$chars = file_get_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars" );
 		$chars += strlen( $text );
-		if ( $chars > $wgGoogleTextToSpeechMaxCharsPerMonth ) {
+		if ( $chars > $wgGoogleTextToSpeechMaxChars ) {
 			return;
-		} else {
-			file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", $chars );
 		}
+		file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", $chars );
 
 		// Build the request
 		$fields = json_encode( [
