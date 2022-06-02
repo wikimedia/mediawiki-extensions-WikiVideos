@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Verdy p"
+		]
+	},
+	"wikivideos-desc": "Convertit du wikicode en vidéos.",
+	"wikivideos-error": "Quelque chose a mal fonctionné lors de la création de la vidéo."
+}

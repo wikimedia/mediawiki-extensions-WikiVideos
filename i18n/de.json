@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Brettchenweber"
+		]
+	},
+	"wikivideos-desc": "Wikitext in Videos umwandeln.",
+	"wikivideos-error": "Bei der Erstellung des Videos ist etwas schiefgelaufen."
+}
