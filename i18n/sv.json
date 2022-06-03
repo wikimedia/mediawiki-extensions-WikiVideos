@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Sabelöga"
+		]
+	},
+	"wikivideos-desc": "Förvandla wikitext till videor.",
+	"wikivideos-error": "Någonting blev fel när videon skulle skapas."
+}
