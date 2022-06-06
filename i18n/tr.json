@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Hedda"
+		]
+	},
+	"wikivideos-desc": "Viki metnini videolara dönüştürün.",
+	"wikivideos-error": "Video oluşturulurken bir şeyler ters gitti."
+}
