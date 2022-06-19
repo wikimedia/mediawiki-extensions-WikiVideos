@@ -1,6 +1,11 @@
 <?php
 
 use MediaWiki\MediaWikiServices;
+use Google\Cloud\TextToSpeech\V1\AudioConfig;
+use Google\Cloud\TextToSpeech\V1\AudioEncoding;
+use Google\Cloud\TextToSpeech\V1\SynthesisInput;
+use Google\Cloud\TextToSpeech\V1\TextToSpeechClient;
+use Google\Cloud\TextToSpeech\V1\VoiceSelectionParams;
 
 class WikiVideos {
 
@@ -138,8 +143,12 @@ class WikiVideos {
 	 * @return string ID of the resulting MP4 file
 	 */
 	public static function getVideoID( $contents, $options = [] ) {
-		global $wgUploadDirectory, $wgFFmpegLocation, $wgFFprobeLocation;
+		global $wgUploadDirectory,
+			$wgFFmpegLocation,
+			$wgFFprobeLocation,
+			$wgGoogleCloudKey;
 
+		// This runs only the first time a wikivideo is created
 		if ( !file_exists( "$wgUploadDirectory/wikivideos" ) ) {
 			mkdir( "$wgUploadDirectory/wikivideos" );
 			mkdir( "$wgUploadDirectory/wikivideos/videos" );
@@ -156,6 +165,11 @@ class WikiVideos {
 			return $videoID;
 		}
 
+		// Initialize Google Text-to-Speech Client
+		$GoogleTextToSpeechClient = new TextToSpeechClient( [
+			'credentials' => $wgGoogleCloudKey
+		] );
+
 		// Build the text files
 		$videoText = '';
 		$audioText = '';
@@ -170,7 +184,7 @@ class WikiVideos {
 			$text = $param[1] ?? '';
 
 			$beforeAudioID = self::getAudioID( $timeBeforeAudio );
-			$textAudioID = self::getAudioID( $text, $options );
+			$textAudioID = self::getAudioID( $text, $options, $GoogleTextToSpeechClient );
 			$afterAudioID = self::getAudioID( $timeAfterAudio );
 			$videoDuration = 0;
 			if ( $beforeAudioID ) {
@@ -245,10 +259,9 @@ class WikiVideos {
 	 * @param string $text Text to convert
 	 * @return string Absolute path to the resulting MP3 file
 	 */
-	public static function getAudioID( $text, $options = [] ) {
+	public static function getAudioID( $text, $options = [], $GoogleTextToSpeechClient = null ) {
 		global $wgUploadDirectory,
 			$wgFFmpegLocation,
-			$wgGoogleCloudSDK,
 			$wgGoogleTextToSpeechMaxChars,
 			$wgWikiVideosVoiceLanguage,
 			$wgWikiVideosVoiceGender,
@@ -293,43 +306,17 @@ class WikiVideos {
 		}
 		file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", $chars );
 
-		// Build the request
-		$fields = json_encode( [
-			"input" => [
-				"text" => $text
-			],
-			"voice" => [
-				"languageCode" => $options['voice-language'] ?? $wgWikiVideosVoiceLanguage,
-				"ssmlGender" => $options['voice-gender'] ?? $wgWikiVideosVoiceGender,
-				"name" => $options['voice-name'] ?? $wgWikiVideosVoiceName,
-			],
-			"audioConfig" => [
-				"audioEncoding" => "MP3"
-			]
-		] );
-		$token = exec( "$wgGoogleCloudSDK auth print-access-token" );
-		$headers = [
-			"Authorization: Bearer $token",
-			'Content-Type: application/json'
-		];
-
 		// Do the request
-		$curl = curl_init( 'https://texttospeech.googleapis.com/v1/text:synthesize' );
-		curl_setopt( $curl, CURLOPT_POST, true );
-		curl_setopt( $curl, CURLOPT_POSTFIELDS, $fields );
-		curl_setopt( $curl, CURLOPT_HTTPHEADER, $headers );
-		curl_setopt( $curl, CURLOPT_RETURNTRANSFER, true );
-		$json = curl_exec( $curl );
-		curl_close( $curl );
+		$input = new SynthesisInput();
+		$input->setText( $text );
+		$voice = new VoiceSelectionParams();
+		$voice->setLanguageCode( $wgWikiVideosVoiceLanguage );
+		$audioConfig = new AudioConfig();
+		$audioConfig->setAudioEncoding( AudioEncoding::MP3 );
+		$response = $GoogleTextToSpeechClient->synthesizeSpeech( $input, $voice, $audioConfig );
 
-		// Generate the MP3 file
-		$data = json_decode( $json, true );
-		//var_dump( $data ); exit; // Uncomment to debug
-		$content = $data['audioContent'];
-		$audioText = "$wgUploadDirectory/wikivideos/audios/$audioID.txt";
-		file_put_contents( $audioText, $content );
-		exec( "base64 $audioText -d > $audioFile" );
-		unlink( $audioText ); // Clean up
+		// Save the audio file
+		file_put_contents( $audioFile, $response->getAudioContent() );
 
 		// Return the path to the audio file
 		return $audioID;
