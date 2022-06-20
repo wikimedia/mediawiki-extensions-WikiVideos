@@ -145,8 +145,7 @@ class WikiVideos {
 	public static function getVideoID( $contents, $options = [] ) {
 		global $wgUploadDirectory,
 			$wgFFmpegLocation,
-			$wgFFprobeLocation,
-			$wgGoogleCloudKey;
+			$wgFFprobeLocation;
 
 		// This runs only the first time a wikivideo is created
 		if ( !file_exists( "$wgUploadDirectory/wikivideos" ) ) {
@@ -164,11 +163,6 @@ class WikiVideos {
 		if ( file_exists( $videoPath ) ) {
 			return $videoID;
 		}
-
-		// Initialize Google Text-to-Speech Client
-		$GoogleTextToSpeechClient = new TextToSpeechClient( [
-			'credentials' => $wgGoogleCloudKey
-		] );
 
 		// Build the text files
 		$videoText = '';
@@ -262,8 +256,9 @@ class WikiVideos {
 	public static function getAudioID( $text, $options = [], $GoogleTextToSpeechClient = null ) {
 		global $wgUploadDirectory,
 			$wgFFmpegLocation,
+			$wgGoogleCloudKey,
 			$wgGoogleTextToSpeechMaxChars,
-			$wgWikiVideosVoiceLanguage,
+			$wgLanguageCode,
 			$wgWikiVideosVoiceGender,
 			$wgWikiVideosVoiceName;
 
@@ -306,11 +301,31 @@ class WikiVideos {
 		}
 		file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", $chars );
 
-		// Do the request
+		// Figure out the preferred voice
+		$voiceLanguage = $options['voice-language'] ?? $wgLanguageCode; // @todo Use page language instead
+		$voiceName = $options['voice-name'] ?? $wgWikiVideosVoiceName;
+		$voiceGender = $options['voice-gender'] ?? $wgWikiVideosVoiceGender;
+		switch ( strtolower( $voiceGender ) ) {
+			case 'male': // @todo i18n
+				$voiceGender = 1;
+			case 'female':
+				$voiceGender = 2;
+		}
+
+		// Do the request to the Google Text-to-Speech API
+		$GoogleTextToSpeechClient = new TextToSpeechClient( [
+			'credentials' => $wgGoogleCloudKey
+		] );
 		$input = new SynthesisInput();
 		$input->setText( $text );
 		$voice = new VoiceSelectionParams();
-		$voice->setLanguageCode( $wgWikiVideosVoiceLanguage );
+		$voice->setLanguageCode( $voiceLanguage );
+		if ( $voiceGender ) {
+			$voice->setSsmlGender( $voiceGender );
+		}
+		if ( $voiceName ) {
+			$voice->setName( $voiceName );
+		}
 		$audioConfig = new AudioConfig();
 		$audioConfig->setAudioEncoding( AudioEncoding::MP3 );
 		$response = $GoogleTextToSpeechClient->synthesizeSpeech( $input, $voice, $audioConfig );
