@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Kly"
+		]
+	},
+	"wikivideos-desc": "使用 wikitext 轉成影片。",
+	"wikivideos-error": "在產生影片時發生錯誤。"
+}
