@@ -3,6 +3,6 @@
     max-width: 100%;
 }
 .wikivideo-chapter-time {
-    color: blue;
+    color: blue !important;
     cursor: pointer;
 }
