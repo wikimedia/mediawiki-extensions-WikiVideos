@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Lakejason0"
+		]
+	},
+	"wikivideos-desc": "将wikitext转换为视频。",
+	"wikivideos-error": "制作视频时出现了错误。"
+}
