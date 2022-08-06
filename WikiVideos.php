@@ -50,7 +50,7 @@ class WikiVideos {
 		$videoHeight = $videoSize[1];
 		$attribs = [
 			'id' => $videoID,
-			'src' => "$wgUploadPath/wikivideos/videos/$videoID.mp4",
+			'src' => "$wgUploadPath/wikivideos/videos/$videoID.webm",
 			'class' => 'wikivideo',
 			'width' => $args['width'] ?? ( $videoWidth > $videoHeight ? $videoWidth : 'auto' ),
 			'height' => $args['height'] ?? ( $videoHeight > $videoWidth ? $videoHeight : 'auto' ),
@@ -140,7 +140,7 @@ class WikiVideos {
 	 * Convert video contents and options into video
 	 * @param array $contents Video contents
 	 * @param array $options Video options
-	 * @return string ID of the resulting MP4 file
+	 * @return string ID of the resulting WEBM file
 	 */
 	public static function getVideoID( $contents, $options = [] ) {
 		global $wgUploadDirectory,
@@ -159,7 +159,7 @@ class WikiVideos {
 		}
 
 		$videoID = md5( json_encode( [ $contents, $options ] ) );
-		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoID.mp4";
+		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoID.webm";
 		if ( file_exists( $videoPath ) ) {
 			return $videoID;
 		}
