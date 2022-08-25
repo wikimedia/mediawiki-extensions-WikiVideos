@@ -6,6 +6,7 @@ use Google\Cloud\TextToSpeech\V1\AudioEncoding;
 use Google\Cloud\TextToSpeech\V1\SynthesisInput;
 use Google\Cloud\TextToSpeech\V1\TextToSpeechClient;
 use Google\Cloud\TextToSpeech\V1\VoiceSelectionParams;
+use Sophivorus\EasyWiki;
 
 class WikiVideos {
 
@@ -22,7 +23,7 @@ class WikiVideos {
 	 * @param Parser $parser
 	 */
 	public static function onParserFirstCallInit( Parser $parser ) {
-		$parser->setHook( 'wikivideo', [ self::class, 'onWikivideoTag' ] );
+		$parser->setHook( 'wikivideo', [ self::class, 'onWikiVideoTag' ] );
 	}
 
 	/**
@@ -32,7 +33,7 @@ class WikiVideos {
 	 * @param PPFrame $frame
 	 * @return HTML of the wikivideo
 	 */
-	public static function onWikivideoTag( $input, array $args, Parser $parser, PPFrame $frame ) {
+	public static function onWikiVideoTag( $input, array $args, Parser $parser, PPFrame $frame ) {
 		global $wgUploadPath,
 			$wgWikiVideosControls,
 			$wgWikiVideosAutoplay,
@@ -81,6 +82,7 @@ class WikiVideos {
 
 	/**
 	 * Sanitize user input
+	 * 
 	 * @param string $input User input
 	 * @return array Sanitized video contents
 	 */
@@ -94,16 +96,16 @@ class WikiVideos {
 			$normalizedParams = [];
 			foreach ( $params as $param ) {
 				$parts = explode( '=', $param );
-				$name = array_key_exists( 1, $parts ) ? $parts[0] : null;
-				$value = $name ? $parts[1] : $parts[0];
+				$name = array_key_exists( 1, $parts ) ? trim( $parts[0] ) : null;
+				$value = $name ? trim( $parts[1] ) : trim( $parts[0] );
 				if ( !$value ) {
 					continue;
 				}
 				if ( !$name ) {
-					$title = Title::newFromText( $value, NS_FILE );
-					$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $title );
-					if ( $file ) {
+					// @todo Make more robust
+					if ( preg_match( '/\.[a-zA-Z0-9]+$/', $value ) ) {
 						$name = 0;
+						$title = Title::newFromText( $value, NS_FILE );
 						$value = $title->getFullText();
 					} else {
 						$name = 1;
@@ -121,6 +123,7 @@ class WikiVideos {
 
 	/**
 	 * Sanitize user arguments
+	 * 
 	 * @param array $args User supplied arguments
 	 * @return array Sanitized video options
 	 */
@@ -138,125 +141,167 @@ class WikiVideos {
 
 	/**
 	 * Convert video contents and options into video
+	 * 
+	 * We build the video by concatenating many individual minivideos or "scenes"
+	 * Each scene is made up of a single file (or no file, in which case a single black pixel is used)
+	 * displayed while the corresponding text is read aloud by a text-to-speech service (so far only Google's)
+	 * This strategy of building the video out of many small ones is mainly to support the use of mixed file types
+	 * because there's no valid ffmpeg command that will take a soup of mixed file types and make a video
+	 * 
 	 * @param array $contents Video contents
 	 * @param array $options Video options
 	 * @return string ID of the resulting WEBM file
 	 */
 	public static function getVideoID( $contents, $options = [] ) {
 		global $wgUploadDirectory,
+			$wgTmpDirectory,
 			$wgFFmpegLocation,
-			$wgFFprobeLocation;
+			$wgFFprobeLocation,
+			$wgWikiVideosUserAgent;
 
-		// This runs only the first time a wikivideo is created
+		// This runs only the first time a wikivideo is created (completes the installation)
 		if ( !file_exists( "$wgUploadDirectory/wikivideos" ) ) {
 			mkdir( "$wgUploadDirectory/wikivideos" );
 			mkdir( "$wgUploadDirectory/wikivideos/videos" );
+			mkdir( "$wgUploadDirectory/wikivideos/scenes" );
+			mkdir( "$wgUploadDirectory/wikivideos/images" );
 			mkdir( "$wgUploadDirectory/wikivideos/audios" );
 			mkdir( "$wgUploadDirectory/wikivideos/tracks" );
-			file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", 0 );
-			$image = imagecreatetruecolor( 1, 1 );
-			imagejpeg( $image, "$wgUploadDirectory/wikivideos/black-pixel.jpg" );
+			$blackPixel = imagecreatetruecolor( 1, 1 );
+			imagejpeg( $blackPixel, "$wgUploadDirectory/wikivideos/black-pixel.jpg" );
+			file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-charcount", 0 );
 		}
 
+		// Videos are identified by their normalized contents and options
 		$videoID = md5( json_encode( [ $contents, $options ] ) );
 		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoID.webm";
 		if ( file_exists( $videoPath ) ) {
 			return $videoID;
 		}
 
-		// Build the text files
-		$videoText = '';
-		$audioText = '';
+		// Store the scenes for later
+		$scenes = [];
+
+		// We'll use this loop to build the track file too (subtitles)
 		$trackText = 'WEBVTT';
 		$timeElapsed = 0;
-		$timeBeforeAudio = 0.5;
-		$timeAfterAudio = 0.5;
-		$videoWidth = 0;
-		$videoHeight = 0;
+
+		// We'll add a bit of silence before and after each audio
+		$silenceDuration = 0.5;
+		$silenceID = self::getAudioID( $silenceDuration );
+		$silencePath = "$wgUploadDirectory/wikivideos/audios/$silenceID.mp3";
+
 		foreach ( $contents as $param ) {
 			$file = $param[0] ?? '';
 			$text = $param[1] ?? '';
 
-			$beforeAudioID = self::getAudioID( $timeBeforeAudio );
-			$textAudioID = self::getAudioID( $text, $options, $GoogleTextToSpeechClient );
-			$afterAudioID = self::getAudioID( $timeAfterAudio );
-			$videoDuration = 0;
-			if ( $beforeAudioID ) {
-				$audioText .= "file $wgUploadDirectory/wikivideos/audios/$beforeAudioID.mp3" . PHP_EOL;
-				$audioText .= "duration $timeBeforeAudio" . PHP_EOL;
-				$videoDuration += $timeBeforeAudio;
-			}
-			if ( $textAudioID ) {
-				$audioDuration = exec( "$wgFFprobeLocation -i $wgUploadDirectory/wikivideos/audios/$textAudioID.mp3 -show_format -v quiet | sed -n 's/duration=//p'" );
-				$audioText .= "file $wgUploadDirectory/wikivideos/audios/$textAudioID.mp3" . PHP_EOL;
-				$audioText .= "duration $audioDuration" . PHP_EOL;
-				$videoDuration += $audioDuration;
-			}
-			if ( $afterAudioID ) {
-				$audioText .= "file $wgUploadDirectory/wikivideos/audios/$beforeAudioID.mp3" . PHP_EOL;
-				$audioText .= "duration $timeAfterAudio" . PHP_EOL;
-				$videoDuration += $timeAfterAudio;
+			if ( $file ) {
+				$fileTitle = Title::newFromText( $file, NS_FILE );
+				$fileObject = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $fileTitle );
+				if ( $fileObject ) {
+					$fileID = $fileObject->getSha1();
+					$filePath = "$wgUploadDirectory/" . $fileObject->getRel();
+				} else {
+					$fileID = $fileTitle->getDBKey();
+					$filePath = "$wgUploadDirectory/wikivideos/images/$fileID";
+					if ( !file_exists( $filePath ) ) {
+	
+						// Get the file URL
+						// @todo Use internal methods
+						$commons = new EasyWiki( 'https://commons.wikimedia.org/w/api.php' );
+						$params = [
+						    'titles' => $file,
+						    'action' => 'query',
+						    'prop' => 'imageinfo',
+						    'iiprop' => 'url'
+						];
+						$fileURL = $commons->query( $params, 'url' );
+	
+						// Download the file
+						$curl = curl_init( $fileURL );
+						$filePointer = fopen( $filePath, 'wb' );
+						curl_setopt( $curl, CURLOPT_FILE, $filePointer );
+						curl_setopt( $curl, CURLOPT_HEADER, 0 );
+						curl_setopt( $curl, CURLOPT_USERAGENT, $wgWikiVideosUserAgent );
+						curl_exec( $curl );
+						curl_close( $curl );
+						fclose( $filePointer );
+					}
+				}
+			} else {
+				$fileID = 'black-pixel';
+				$filePath = "$wgUploadDirectory/wikivideos/$fileID.jpg";
 			}
 
+			$audioID = self::getAudioID( $text, $options );
+			$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+			$audioDuration = exec( "$wgFFprobeLocation -i $audioPath -show_format -v quiet | sed -n 's/duration=//p'" );
+
 			if ( $text ) {
-				$trackStart = $timeElapsed + $timeBeforeAudio;
-				$trackEnd = $timeElapsed + $videoDuration - $timeBeforeAudio;
+				$trackStart = $timeElapsed + $silenceDuration;
+				$trackEnd = $timeElapsed + $audioDuration - $silenceDuration;
 				$trackText .= PHP_EOL . PHP_EOL;
 				$trackText .= date( 'i:s.v', $trackStart );
 				$trackText .= ' --> ';
 				$trackText .= date( 'i:s.v', $trackEnd );
 				$trackText .= PHP_EOL . $text;
 			}
-			$timeElapsed += $videoDuration;
+			$timeElapsed += $silenceDuration + $audioDuration + $silenceDuration;
 
-			$fileTitle = Title::newFromText( $file, NS_FILE );
-			$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $fileTitle );
-			if ( $file ) {
-				$filePath = $file->getRel();
-				$filePath = "$wgUploadDirectory/$filePath";
-			} else {
-				$filePath = "$wgUploadDirectory/wikivideos/black-pixel.jpg";
+			$sceneID = md5( json_encode( [ $fileID, $audioID ] ) );
+			$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneID.webm";
+			$scenes[] = $scenePath;
+			if ( file_exists( $scenePath ) ) {
+				continue;
 			}
-			$videoText .= "file $filePath" . PHP_EOL;
-			$videoText .= "duration $videoDuration" . PHP_EOL;
+
+			// Make the scene by displaying the image for the duration of the audio
+			// plus a bit of silence before and after
+			$sceneConcatFile = "$wgTmpDirectory/$sceneID.txt";
+			$sceneConcatText = "file $silencePath" . PHP_EOL;
+			$sceneConcatText .= "file $audioPath" . PHP_EOL;
+			$sceneConcatText .= "file $silencePath" . PHP_EOL;
+			file_put_contents( $sceneConcatFile, $sceneConcatText );
+			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i $filePath -vsync vfr -pix_fmt yuv420p $scenePath";
+			//echo $command; exit; // Uncomment to debug
+			exec( $command, $output );
+			//var_dump( $output ); exit; // Uncomment to debug
+			unlink( $sceneConcatFile ); // Clean up
 		}
 
-		// Create the files
-		$audioFile = "$wgUploadDirectory/wikivideos/audios/$videoID.txt";
-		file_put_contents( $audioFile, $audioText );
-
+		// Make the track file
 		$trackFile = "$wgUploadDirectory/wikivideos/tracks/$videoID.vtt";
 		file_put_contents( $trackFile, $trackText );
 
-		$videoText .= "file $filePath"; // Due to a ffmpeg quirk, the last image needs to be specified twice, see https://trac.ffmpeg.org/wiki/Slideshow
-		$videoFile = "$wgUploadDirectory/wikivideos/videos/$videoID.txt";
-		file_put_contents( $videoFile, $videoText );
-
-		// Make the video
+		// Make the video file
 		$videoSize = self::getVideoSize( $contents );
 		$videoWidth = $videoSize[0];
 		$videoHeight = $videoSize[1];
-		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $videoFile -safe 0 -f concat -i $audioFile -vsync vfr -pix_fmt yuv420p -filter:v 'scale=iw*min($videoWidth/iw\,$videoHeight/ih):ih*min($videoWidth/iw\,$videoHeight/ih), pad=$videoWidth:$videoHeight:($videoWidth-iw*min($videoWidth/iw\,$videoHeight/ih))/2:($videoHeight-ih*min($videoWidth/iw\,$videoHeight/ih))/2' $videoPath";
+		$videoConcatFile = "$wgTmpDirectory/$videoID.txt";
+		$videoConcatText = '';
+		foreach ( $scenes as $scene ) {
+			$videoConcatText .= "file $scene" . PHP_EOL;
+		}
+		file_put_contents( $videoConcatFile, $videoConcatText );
+		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $videoConcatFile -max_muxing_queue_size 9999 -filter:v 'scale=iw*min($videoWidth/iw\,$videoHeight/ih):ih*min($videoWidth/iw\,$videoHeight/ih), pad=$videoWidth:$videoHeight:($videoWidth-iw*min($videoWidth/iw\,$videoHeight/ih))/2:($videoHeight-ih*min($videoWidth/iw\,$videoHeight/ih))/2' $videoPath";
 		//echo $command; exit; // Uncomment to debug
 		exec( $command, $output );
 		//var_dump( $output ); exit; // Uncomment to debug
-
-		// Clean up
-		unlink( $audioFile );
-		unlink( $videoFile );
+		unlink( $videoConcatFile ); // Clean up
 
 		return $videoID;
 	}
 
 	/**
 	 * Convert text into audio using Google's text-to-speech service
+	 * 
 	 * @param string $text Text to convert
 	 * @return string Absolute path to the resulting MP3 file
 	 */
-	public static function getAudioID( $text, $options = [], $GoogleTextToSpeechClient = null ) {
+	public static function getAudioID( $text, $options = [] ) {
 		global $wgUploadDirectory,
 			$wgFFmpegLocation,
-			$wgGoogleCloudKey,
+			$wgGoogleCloudCredentials,
 			$wgGoogleTextToSpeechMaxChars,
 			$wgLanguageCode,
 			$wgWikiVideosVoiceGender,
@@ -267,7 +312,7 @@ class WikiVideos {
 		}
 
 		// If the text is just a number
-		// use FFMPEG to make a silent MP3 of that many seconds
+		// make a silent MP3 of that many seconds
 		if ( is_numeric( $text ) ) {
 			$audioID = md5( $text );
 			$audioFile = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
@@ -294,12 +339,12 @@ class WikiVideos {
 		}
 
 		// Keep track of the translated characters
-		$chars = file_get_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars" );
+		$chars = file_get_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-charcount" );
 		$chars += strlen( $text );
 		if ( $chars > $wgGoogleTextToSpeechMaxChars ) {
 			return;
 		}
-		file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-translated-chars", $chars );
+		file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-charcount", $chars );
 
 		// Figure out the preferred voice
 		$voiceLanguage = $options['voice-language'] ?? $wgLanguageCode; // @todo Use page language instead
@@ -314,7 +359,7 @@ class WikiVideos {
 
 		// Do the request to the Google Text-to-Speech API
 		$GoogleTextToSpeechClient = new TextToSpeechClient( [
-			'credentials' => $wgGoogleCloudKey
+			'credentials' => $wgGoogleCloudCredentials
 		] );
 		$input = new SynthesisInput();
 		$input->setText( $text );
@@ -339,25 +384,32 @@ class WikiVideos {
 
 	/**
 	 * Infer the appropriate video size out of the video contents
+	 * 
 	 * @param array $contents Video contents
 	 * @return array Video Width and height
 	 */
 	public static function getVideoSize( $contents ) {
-		global $wgUploadDirectory, $wgWikiVideosMaxWidth, $wgWikiVideosMaxHeight;
-		$videoWidth = 0;
-		$videoHeight = 0;
+		global $wgUploadDirectory,
+			$wgWikiVideosMinWidth,
+			$wgWikiVideosMinHeight,
+			$wgWikiVideosMaxWidth,
+			$wgWikiVideosMaxHeight;
+
+		$videoWidth = $wgWikiVideosMinWidth;
+		$videoHeight = $wgWikiVideosMinHeight;
 		foreach ( $contents as $content ) {
-			if ( !array_key_exists( 0, $content ) ) {
-				continue;
+			$file = $content[0] ?? '';
+			if ( $file ) {
+				$fileTitle = Title::newFromText( $file, NS_FILE );
+				$fileObject = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $fileTitle );
+				if ( $fileObject ) {
+					$filePath = "$wgUploadDirectory/" . $fileObject->getRel();
+				} else {
+					$filePath = "$wgUploadDirectory/wikivideos/images/" . $fileTitle->getDBKey();
+				}
+			} else {
+				$filePath = "$wgUploadDirectory/wikivideos/black-pixel.jpg";
 			}
-			$fileName = $content[0];
-			$fileTitle = Title::newFromText( $fileName );
-			$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $fileTitle );
-			if ( !$file ) {
-				continue;
-			}
-			$filePath = $file->getRel();
-			$filePath = "$wgUploadDirectory/$filePath";
 			$imageSize = getimagesize( $filePath );
 			$imageWidth = $imageSize[0];
 			$imageHeight = $imageSize[1];
@@ -389,6 +441,7 @@ class WikiVideos {
 	/**
 	 * Get the video poster out of the user supplied arguments
 	 * or out of the video contents
+	 * 
 	 * @param array $contents Video contents
 	 * @param array $args User supplied arguments
 	 * @return string Relative URL of the video poster
@@ -415,9 +468,10 @@ class WikiVideos {
 	 * Get the HTML of the chapters list for the given video ID
 	 * 
 	 * Someday browsers may provide a native interface for navigating chapters
-	 * and this interface may become somwhat redundant
-	 * but printing the text also makes it easy to browse
-	 * and indexable by search engines
+	 * and this interface may become somewhat redundant
+	 * but printing the full text also makes it easy to browse
+	 * makes it indexable by search engines
+	 * and adds some accessibility support
 	 * 
 	 * @param string $videoID Video ID
 	 * @return string HTML of the chapters list

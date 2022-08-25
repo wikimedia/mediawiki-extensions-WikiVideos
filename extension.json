@@ -1,6 +1,6 @@
 {
 	"name": "WikiVideos",
-	"version": "2.2",
+	"version": "2.3",
 	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
 	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
 	"descriptionmsg": "wikivideos-desc",
@@ -42,11 +42,20 @@
 		"remoteExtPath": "WikiVideos"
 	},
 	"config": {
-		"GoogleCloudKey": {
+		"GoogleCloudCredentials": {
 			"value": ""
 		},
 		"GoogleTextToSpeechMaxChars": {
 			"value": 4000000
+		},
+		"WikiVideosUserAgent": {
+			"value": "WikiVideos/2.3 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
+		},
+		"WikiVideosMinWidth": {
+			"value": 200
+		},
+		"WikiVideosMinHeight": {
+			"value": 200
 		},
 		"WikiVideosMaxWidth": {
 			"value": 1280
