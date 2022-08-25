@@ -157,7 +157,9 @@ class WikiVideos {
 			$wgTmpDirectory,
 			$wgFFmpegLocation,
 			$wgFFprobeLocation,
-			$wgWikiVideosUserAgent;
+			$wgWikiVideosUserAgent,
+			$wgWikiVideosMaxVideoWidth,
+			$wgWikiVideosMaxVideoHeight;
 
 		// This runs only the first time a wikivideo is created (completes the installation)
 		if ( !file_exists( "$wgUploadDirectory/wikivideos" ) ) {
@@ -208,6 +210,7 @@ class WikiVideos {
 	
 						// Get the file URL
 						// @todo Use internal methods
+						// @todo Limit size of images by $wgWikiVideosMaxVideoWidth and $wgWikiVideosMaxVideoHeight
 						$commons = new EasyWiki( 'https://commons.wikimedia.org/w/api.php' );
 						$params = [
 						    'titles' => $file,
@@ -262,7 +265,8 @@ class WikiVideos {
 			$sceneConcatText .= "file $audioPath" . PHP_EOL;
 			$sceneConcatText .= "file $silencePath" . PHP_EOL;
 			file_put_contents( $sceneConcatFile, $sceneConcatText );
-			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i $filePath -vsync vfr -pix_fmt yuv420p $scenePath";
+			// @todo Scaling should depend on $wgWikiVideosMaxVideoWidth and $wgWikiVideosMaxVideoHeight
+			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i $filePath -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min(1280\,min(iw\,round(1280*iw/ih))):-2' $scenePath";
 			//echo $command; exit; // Uncomment to debug
 			exec( $command, $output );
 			//var_dump( $output ); exit; // Uncomment to debug
