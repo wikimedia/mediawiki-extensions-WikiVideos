@@ -266,7 +266,7 @@ class WikiVideos {
 			$sceneConcatText .= "file $silencePath" . PHP_EOL;
 			file_put_contents( $sceneConcatFile, $sceneConcatText );
 			// @todo Scaling should depend on $wgWikiVideosMaxVideoWidth and $wgWikiVideosMaxVideoHeight
-			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i $filePath -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min(1280\,min(iw\,round(1280*iw/ih))):-2' $scenePath";
+			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$filePath' -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min(1280\,min(iw\,round(1280*iw/ih))):-2' $scenePath";
 			//echo $command; exit; // Uncomment to debug
 			exec( $command, $output );
 			//var_dump( $output ); exit; // Uncomment to debug
