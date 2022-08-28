@@ -6,3 +6,6 @@
     color: blue !important;
     cursor: pointer;
 }
+.wikivideo-chapter-text p {
+    display: inline;
+}

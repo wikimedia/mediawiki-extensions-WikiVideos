@@ -1,6 +1,6 @@
 {
 	"name": "WikiVideos",
-	"version": "2.3.1",
+	"version": "3.0",
 	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
 	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
 	"descriptionmsg": "wikivideos-desc",
@@ -49,7 +49,7 @@
 			"value": 4000000
 		},
 		"WikiVideosUserAgent": {
-			"value": "WikiVideos/2.3 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
+			"value": "WikiVideos/3.0 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
 		},
 		"WikiVideosMinWidth": {
 			"value": 200
