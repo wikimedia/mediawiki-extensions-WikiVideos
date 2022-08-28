@@ -74,21 +74,21 @@ class WikiVideos {
 			'height' => $args['height'] ?? ( $videoHeight > $videoWidth ? $videoHeight : 'auto' ),
 			'controls' => $args['controls'] ?? $wgWikiVideosControls,
 			'autoplay' => $args['autoplay'] ?? $wgWikiVideosAutoplay,
-			'poster' => self::getPoster( $args, $videoContents ),
+			'poster' => self::getPoster( $videoContents, $videoOptions ),
 		];
 		$attribs = array_filter( $attribs );
 
 		// Captions
 		$captions = $args['captions'] ?? $wgWikiVideosCaptions;
 		$trackID = self::getTrack( $videoContents, $videoOptions, $parser );
-		$tracks = Html::element( 'track', [
+		$track = Html::element( 'track', [
 			'default' => $captions ? true : false,
 			'kind' => 'captions',
 			'src' => "$wgUploadPath/wikivideos/tracks/$trackID.vtt"
 		] );
 
-		// Video tag
-		$html = Html::rawElement( 'video', $attribs, $tracks );
+		// Main tag
+		$html = Html::rawElement( 'video', $attribs, $track );
 
 		// Chapters
 		$chapters = $args['chapters'] ?? $wgWikiVideosChapters;
@@ -447,13 +447,11 @@ class WikiVideos {
 	 */
 	private static function getVideoSize( array $contents ) {
 		global $wgUploadDirectory,
-			$wgWikiVideosMinWidth,
-			$wgWikiVideosMinHeight,
-			$wgWikiVideosMaxWidth,
-			$wgWikiVideosMaxHeight;
+			$wgWikiVideosMinSize,
+			$wgWikiVideosMaxSize;
 
-		$videoWidth = $wgWikiVideosMinWidth;
-		$videoHeight = $wgWikiVideosMinHeight;
+		$videoWidth = $wgWikiVideosMinSize;
+		$videoHeight = $wgWikiVideosMinSize;
 
 		foreach ( $contents as $content ) {
 			$file = $content[0] ?? '';
@@ -481,12 +479,12 @@ class WikiVideos {
 		}
 
 		$videoRatio = $videoWidth / $videoHeight;
-		if ( $videoWidth > $videoHeight && $videoWidth > $wgWikiVideosMaxWidth ) {
-			$videoWidth = $wgWikiVideosMaxWidth;
+		if ( $videoWidth > $videoHeight && $videoWidth > $wgWikiVideosMaxSize ) {
+			$videoWidth = $wgWikiVideosMaxSize;
 			$videoHeight = round( $videoWidth * $videoRatio );
 		}
-		if ( $videoHeight > $videoWidth && $videoHeight > $wgWikiVideosMaxHeight ) {
-			$videoHeight = $wgWikiVideosMaxHeight;
+		if ( $videoHeight > $videoWidth && $videoHeight > $wgWikiVideosMaxSize ) {
+			$videoHeight = $wgWikiVideosMaxSize;
 			$videoWidth = round( $videoHeight * $videoRatio );
 		}
 		if ( $videoWidth % 2 ) {
@@ -502,13 +500,13 @@ class WikiVideos {
 	 * Get video poster out of poster argument
 	 * or out of normalized <wikivideo> contents
 	 * 
-	 * @param array $args User supplied arguments
 	 * @param array $contents Normalized video contents
+	 * @param array $options Normalized video options
 	 * @return string Relative URL of the video poster
 	 */
-	private static function getPoster( array $args, array $contents ) {
-		if ( array_key_exists( 'poster', $args ) ) {
-			$poster = $args['poster'];
+	private static function getPoster( array $contents, array $options ) {
+		if ( array_key_exists( 'poster', $options ) ) {
+			$poster = $options['poster'];
 		} else {
 			foreach ( $contents as $content ) {
 				if ( array_key_exists( 0, $content ) ) {
@@ -586,7 +584,7 @@ class WikiVideos {
 
 		// Get file URL
 		// @todo Use internal methods
-		// @todo Limit image size by $wgWikiVideosMaxVideoWidth and $wgWikiVideosMaxVideoHeight
+		// @todo Limit image size by $wgWikiVideosMaxSize
 		$commons = new EasyWiki( 'https://commons.wikimedia.org/w/api.php' );
 		$params = [
 		    'titles' => $file->getFullText(),
