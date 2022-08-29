@@ -188,8 +188,7 @@ class WikiVideos {
 		global $wgUploadDirectory,
 			$wgTmpDirectory,
 			$wgFFmpegLocation,
-			$wgWikiVideosMaxVideoWidth,
-			$wgWikiVideosMaxVideoHeight;
+			$wgWikiVideosMaxVideoSize;
 
 		// Identify videos based on their normalized content and options
 		// so if nothing changes, we don't regenerate them
@@ -201,9 +200,9 @@ class WikiVideos {
 
 		// Make silent audio to add before and after each audio
 		// @todo Make duration configurable per-scene via inline parameters
-		$silenceDuration = 0.5;
-		$silenceID = self::getSilentAudio( $silenceDuration );
-		$silencePath = "$wgUploadDirectory/wikivideos/audios/$silenceID.mp3";
+		$silentAudioDuration = 0.5;
+		$silentAudioID = self::getSilentAudio( $silentAudioDuration );
+		$silentAudioPath = "$wgUploadDirectory/wikivideos/audios/$silentAudioID.mp3";
 
 		// Make scenes
 		$scenes = [];
@@ -239,12 +238,11 @@ class WikiVideos {
 			// Make the scene by displaying the image for the duration of the audio
 			// plus a bit of silence before and after
 			$sceneConcatFile = "$wgTmpDirectory/$sceneID.txt";
-			$sceneConcatText = "file $silencePath" . PHP_EOL;
+			$sceneConcatText = "file $silentAudioPath" . PHP_EOL;
 			$sceneConcatText .= "file $audioPath" . PHP_EOL;
-			$sceneConcatText .= "file $silencePath" . PHP_EOL;
+			$sceneConcatText .= "file $silentAudioPath" . PHP_EOL;
 			file_put_contents( $sceneConcatFile, $sceneConcatText );
-			// @todo Scaling should depend on $wgWikiVideosMaxVideoWidth and $wgWikiVideosMaxVideoHeight
-			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$filePath' -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min(1280\,min(iw\,round(1280*iw/ih))):-2' $scenePath";
+			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$filePath' -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min($wgWikiVideosMaxVideoSize\,min(iw\,round($wgWikiVideosMaxVideoSize*iw/ih))):-2' $scenePath";
 			//echo $command; exit; // Uncomment to debug
 			exec( $command, $output );
 			//var_dump( $output ); exit; // Uncomment to debug
@@ -326,20 +324,36 @@ class WikiVideos {
 	private static function getSceneDuration( array $content, array $options, Parser $parser ) {
 		global $wgUploadDirectory, $wgFFprobeLocation;
 
-		$sceneDuration = 1; // Minimum scene length
-
-		// @todo Add code for file duration
 		$file = $content[0] ?? '';
+		$fileDuration = 0;
+		if ( $file ) {
+			$fileTitle = Title::newFromText( $file, NS_FILE );
+			$fileObject = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $fileTitle );
+			if ( $fileObject ) {
+				$fileRel = $fileObject->getRel();
+				$filePath = "$wgUploadDirectory/$fileRel";
+			} else {
+				$fileKey = $fileTitle->getDBKey();
+				$filePath = "$wgUploadDirectory/wikivideos/remote/$fileKey";
+			}
+			$fileDuration = exec( "$wgFFprobeLocation -i $filePath -show_format -v quiet | sed -n 's/duration=//p'" );
+			if ( $fileDuration === 'N/A' ) {
+				$fileDuration = 0;
+			}
+		}
 
 		$text = $content[1] ?? '';
+		$audioDuration = 0;
 		if ( $text ) {
 			$audioID = self::getAudio( $text, $options, $parser );
 			$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
-			if ( file_exists( $audioPath ) ) {
-				$audioDuration = exec( "$wgFFprobeLocation -i $audioPath -show_format -v quiet | sed -n 's/duration=//p'" );
-				$silenceDuration = 0.5; // @todo Shouldn't be hardcoded
-				$sceneDuration = $silenceDuration + $audioDuration + $silenceDuration;
-			}
+			$audioDuration = exec( "$wgFFprobeLocation -i $audioPath -show_format -v quiet | sed -n 's/duration=//p'" );
+		}
+
+		$silentAudioDuration = 0.5; // @todo Shouldn't be hardcoded
+		$sceneDuration = $silentAudioDuration + $audioDuration + $silentAudioDuration;
+		if ( $fileDuration > $audioDuration ) {
+			$sceneDuration = $fileDuration;
 		}
 
 		return $sceneDuration;
