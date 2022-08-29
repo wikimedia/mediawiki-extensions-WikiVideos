@@ -45,9 +45,6 @@
 		"GoogleCloudCredentials": {
 			"value": ""
 		},
-		"GoogleTextToSpeechMaxChars": {
-			"value": 4000000
-		},
 		"WikiVideosUserAgent": {
 			"value": "WikiVideos/3.1 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
 		},

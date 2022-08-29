@@ -35,7 +35,6 @@ class WikiVideos {
 			mkdir( "$wgUploadDirectory/wikivideos/tracks" );
 			$blackPixel = imagecreatetruecolor( 1, 1 );
 			imagejpeg( $blackPixel, "$wgUploadDirectory/wikivideos/black-pixel.jpg" );
-			file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-charcount", 0 );
 		}
 
 		$parser->setHook( 'wikivideo', [ self::class, 'onWikiVideoTag' ] );
@@ -394,14 +393,6 @@ class WikiVideos {
 		if ( file_exists( $audioPath ) ) {
 			return $audioID;
 		}
-
-		// Keep track of the translated characters
-		$chars = file_get_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-charcount" );
-		$chars += strlen( $text );
-		if ( $chars > $wgGoogleTextToSpeechMaxChars ) {
-			return;
-		}
-		file_put_contents( "$wgUploadDirectory/wikivideos/google-text-to-speech-charcount", $chars );
 
 		// Figure out the preferred voice
 		$voiceLanguage = $options['voice-language'] ?? $wgLanguageCode; // @todo Use page language instead
