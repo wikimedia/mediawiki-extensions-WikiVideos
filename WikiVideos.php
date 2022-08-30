@@ -188,7 +188,7 @@ class WikiVideos {
 		global $wgUploadDirectory,
 			$wgTmpDirectory,
 			$wgFFmpegLocation,
-			$wgWikiVideosMaxVideoSize;
+			$wgWikiVideosMaxSize;
 
 		// Identify videos based on their normalized content and options
 		// so if nothing changes, we don't regenerate them
@@ -235,14 +235,13 @@ class WikiVideos {
 				continue;
 			}
 
-			// Make the scene by displaying the image for the duration of the audio
-			// plus a bit of silence before and after
+			// Make scene
 			$sceneConcatFile = "$wgTmpDirectory/$sceneID.txt";
 			$sceneConcatText = "file $silentAudioPath" . PHP_EOL;
 			$sceneConcatText .= "file $audioPath" . PHP_EOL;
 			$sceneConcatText .= "file $silentAudioPath" . PHP_EOL;
 			file_put_contents( $sceneConcatFile, $sceneConcatText );
-			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$filePath' -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min($wgWikiVideosMaxVideoSize\,min(iw\,round($wgWikiVideosMaxVideoSize*iw/ih))):-2' $scenePath";
+			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$filePath' -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min($wgWikiVideosMaxSize\,min(iw\,round($wgWikiVideosMaxSize*iw/ih))):-2' $scenePath";
 			//echo $command; exit; // Uncomment to debug
 			exec( $command, $output );
 			//var_dump( $output ); exit; // Uncomment to debug
@@ -263,9 +262,8 @@ class WikiVideos {
 		//echo $command; exit; // Uncomment to debug
 		exec( $command, $output );
 		//var_dump( $output ); exit; // Uncomment to debug
+		unlink( $videoConcatFile ); // Clean up
 
-		// Clean up and return
-		unlink( $videoConcatFile );
 		return $videoID;
 	}
 
