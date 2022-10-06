@@ -2,10 +2,6 @@
     background: black;
     max-width: 100%;
 }
-.wikivideo-chapter-time {
-    color: blue !important;
-    cursor: pointer;
-}
 .wikivideo-chapter-text p {
     display: inline;
 }

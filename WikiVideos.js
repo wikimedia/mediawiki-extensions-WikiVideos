@@ -8,7 +8,7 @@ WikiVideos = {
 		var link = $( this );
 		var seconds = link.data( 'seconds' );
 		var video = link.closest( '.wikivideo-chapters' ).prev( 'video' );
-		video[ 0 ].currentTime = seconds;
+		video[0].currentTime = seconds;
 	}
 };
 

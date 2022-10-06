@@ -1,6 +1,6 @@
 {
 	"name": "WikiVideos",
-	"version": "3.2",
+	"version": "4.0",
 	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
 	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
 	"descriptionmsg": "wikivideos-desc",
@@ -15,11 +15,14 @@
 		]
 	},
 	"AutoloadClasses": {
-		"WikiVideos": "WikiVideos.php"
+		"WikiVideosHooks": "WikiVideosHooks.php",
+		"WikiVideosFactory": "WikiVideosFactory.php",
+		"WikiVideosGallery": "WikiVideosGallery.php"
 	},
 	"Hooks": {
-		"BeforePageDisplay": "WikiVideos::onBeforePageDisplay",
-		"ParserFirstCallInit": "WikiVideos::onParserFirstCallInit"
+		"BeforeInitialize": "WikiVideosHooks::onBeforeInitialize",
+		"BeforePageDisplay": "WikiVideosHooks::onBeforePageDisplay",
+		"GalleryGetModes": "WikiVideosHooks::onGalleryGetModes"
 	},
 	"ResourceModules": {
 		"ext.WikiVideos": {
@@ -46,7 +49,7 @@
 			"value": ""
 		},
 		"WikiVideosUserAgent": {
-			"value": "WikiVideos/3.2 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
+			"value": "WikiVideos/4.0 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
 		},
 		"WikiVideosMinSize": {
 			"value": 200
