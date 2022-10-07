@@ -11,13 +11,19 @@ use Sophivorus\EasyWiki; // Temporary dependency
 class WikiVideosFactory {
 
 	/**
-	 * Make video file out of gallery images and attributes
+	 * Some values are expensive to calculate (such as video durations)
+	 * so we store the ones we'll need more than once
+	 */
+	public $cache = [];
+
+	/**
+	 * Make video file
 	 * 
-	 * The final video is made by concatenating many individual minivideos or "scenes"
-	 * Each scene is made up of a single file displayed while the corresponding text
-	 * is read aloud by a text-to-speech service (so far only Google's)
-	 * This strategy of making the scenes first is mainly to support the use of mixed file types
+	 * The final video is made by simply concatenating individual minivideos or "scenes"
+	 * Each scene is made up of a single file shown while the corresponding text is read aloud
+	 * This strategy of making videos out of scenes is mainly to support the use of mixed file types
 	 * because there's no valid ffmpeg command that will make a video out of a soup of mixed file types
+	 * But another very important reason is to avoid re-encoding everything when a single scene is edited
 	 * 
 	 * @param array $images Gallery images
 	 * @param array $attribs Gallery attributes
@@ -27,84 +33,113 @@ class WikiVideosFactory {
 	public static function makeVideo( array $images, array $attribs, Parser $parser ) {
 		global $wgUploadDirectory,
 			$wgTmpDirectory,
-			$wgFFmpegLocation,
-			$wgWikiVideosMaxSize;
+			$wgFFmpegLocation;
 
-		// Make the video ID out of the elements that define the video
-		// so if nothing relevant changes, we don't regenerate the video
-		$videoElements = [];
+		// Make video ID out of the elements that define the video (the scenes)
+		// so if nothing relevant changes, we can reuse the existing video
+		$scenes = [];
+		$videoSize = self::getVideoSize( $images );
+		$videoWidth = $videoSize[0];
+		$videoHeight = $videoSize[1];
         foreach ( $images as [ $imageTitle, $imageText ] ) {
-            $videoElements[] = $imageTitle->getText();
-            $videoElements[] = trim( $imageText );
+            $sceneID = self::makeScene( $imageTitle, $imageText, $videoWidth, $videoHeight, $attribs, $parser );
+            $scenes[] = $sceneID;
         }
-        $videoElements[] = $attribs['voice-language'];
-        $videoElements[] = $attribs['voice-gender'];
-        $videoElements[] = $attribs['voice-name'];
-		$videoID = md5( json_encode( $videoElements ) );
+		$videoID = md5( json_encode( $scenes ) );
 		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoID.webm";
 		if ( file_exists( $videoPath ) ) {
 			return $videoID;
 		}
 
-		// Make silent audio to add before and after each audio
-		$silentAudioDuration = 0.5;
-		$silentAudioID = self::makeSilentAudio( $silentAudioDuration );
-		$silentAudioPath = "$wgUploadDirectory/wikivideos/audios/$silentAudioID.mp3";
-
-		// Make scenes
-		$scenes = [];
-        foreach ( $images as [ $imageTitle, $imageText ] ) {
-
-			$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
-			if ( $imageFile ) {
-				$imageID = $imageFile->getSha1();
-				$imageRel = $imageFile->getRel();
-				$imagePath = "$wgUploadDirectory/$imageRel";
-			} else {
-				$imageID = self::getRemoteFile( $imageTitle );
-				$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageID";
-			}
-
-			$audioID = self::makeAudio( $imageText, $attribs, $parser );
-			$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
-
-			$sceneID = md5( json_encode( [ $imageID, $audioID ] ) );
-			$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneID.webm";
-			$scenes[] = $scenePath;
-			if ( file_exists( $scenePath ) ) {
-				continue;
-			}
-
-			// Make scene
-			$sceneConcatFile = "$wgTmpDirectory/$sceneID.txt";
-			$sceneConcatText = "file $silentAudioPath" . PHP_EOL;
-			$sceneConcatText .= "file $audioPath" . PHP_EOL;
-			$sceneConcatText .= "file $silentAudioPath" . PHP_EOL;
-			file_put_contents( $sceneConcatFile, $sceneConcatText );
-			$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$imagePath' -vsync vfr -pix_fmt yuv420p -filter:v 'scale=min($wgWikiVideosMaxSize\,min(iw\,round($wgWikiVideosMaxSize*iw/ih))):-2' $scenePath";
-			//echo $command; exit; // Uncomment to debug
-			exec( $command, $output );
-			//var_dump( $output ); exit; // Uncomment to debug
-			unlink( $sceneConcatFile ); // Clean up
-		}
-
-		// Make final video
-		$videoSize = self::getVideoSize( $images );
-		$videoWidth = $videoSize[0];
-		$videoHeight = $videoSize[1];
+		// Make video by concatenating individual scenes
 		$videoConcatFile = "$wgTmpDirectory/$videoID.txt";
 		$videoConcatText = '';
-		foreach ( $scenes as $scene ) {
-			$videoConcatText .= "file $scene" . PHP_EOL;
+        foreach ( $scenes as $sceneID ) {
+			$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneID.webm";
+			$videoConcatText .= "file $scenePath" . PHP_EOL;
 		}
 		file_put_contents( $videoConcatFile, $videoConcatText );
-		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $videoConcatFile -max_muxing_queue_size 9999 -filter:v 'scale=iw*min($videoWidth/iw\,$videoHeight/ih):ih*min($videoWidth/iw\,$videoHeight/ih), pad=$videoWidth:$videoHeight:($videoWidth-iw*min($videoWidth/iw\,$videoHeight/ih))/2:($videoHeight-ih*min($videoWidth/iw\,$videoHeight/ih))/2' $videoPath";
+		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $videoConcatFile -max_muxing_queue_size 9999 -c copy $videoPath";
 		//echo $command; exit; // Uncomment to debug
 		exec( $command, $output );
 		//var_dump( $output ); exit; // Uncomment to debug
 		unlink( $videoConcatFile ); // Clean up
 
 		return $videoID;
+	}
+
+	/**
+	 * Make scene file
+	 * 
+	 * Unfortunately, the width and height of the final video are parameters of this method.
+	 * So if the size of the final video changes, for example because a single scene is added, then all scenes will be regenerated.
+	 * However if we don't make scenes depend on the size of the final video, then we can't just concatenate the final video, we need to re-encode it, which is absurdly slow.
+	 * Another option is to hard-code the size of the final video (like YouTube does) but this doesn't allow vertical videos or any othe aspect ratio.
+	 * Yet another option is to set the width and height of the videos from the <video> tag, but this results in mediocre files when downloaded.
+	 * None is perfect.
+	 * 
+	 * @param array $image Image data
+	 * @param int $videoWidth
+	 * @param int $videoHeight
+	 * @param array $attribs
+	 * @param Parser $parser
+	 * @return string Scene ID
+	 */
+	public static function makeScene( Title $imageTitle, string $imageText, int $videoWidth, int $videoHeight, array $attribs, Parser $parser ) {
+		global $wgUploadDirectory, $wgTmpDirectory, $wgFFmpegLocation;
+
+		$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
+		if ( $imageFile ) {
+			$imageID = $imageFile->getSha1();
+			$imageRel = $imageFile->getRel();
+			$imagePath = "$wgUploadDirectory/$imageRel";
+		} else {
+			$imageID = self::getRemoteFile( $imageTitle );
+			$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageID";
+		}
+
+		$audioID = self::makeAudio( $imageText, $attribs, $parser );
+		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+
+		// Make scene ID out of the elements that define the scene
+		// so if nothing relevant changes, we can reuse the existing scene
+        $sceneElements[] = $imageID;
+        $sceneElements[] = $audioID;
+        $sceneElements[] = $videoWidth;
+        $sceneElements[] = $videoHeight;
+        $sceneElements[] = $attribs['ken-burns-effect'] ? true : false;
+		$sceneID = md5( json_encode( $sceneElements ) );
+		$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneID.webm";
+		if ( file_exists( $scenePath ) ) {
+			return $sceneID;
+		}
+
+		// Make silent audio to add before and after each scene
+		$silentAudioDuration = 0.5; // @todo Make configurable
+		$silentAudioID = self::makeSilentAudio( $silentAudioDuration );
+		$silentAudioPath = "$wgUploadDirectory/wikivideos/audios/$silentAudioID.mp3";
+
+		// Make scene
+		$sceneConcatFile = "$wgTmpDirectory/$sceneID.txt";
+		$sceneConcatText = "file $silentAudioPath" . PHP_EOL;
+		$sceneConcatText .= "file $audioPath" . PHP_EOL;
+		$sceneConcatText .= "file $silentAudioPath" . PHP_EOL;
+		file_put_contents( $sceneConcatFile, $sceneConcatText );
+		$filter = "scale=iw*min($videoWidth/iw\,$videoHeight/ih):ih*min($videoWidth/iw\,$videoHeight/ih)";
+		$filter .= ",pad=$videoWidth:$videoHeight:($videoWidth-iw*min($videoWidth/iw\,$videoHeight/ih))/2:($videoHeight-ih*min($videoWidth/iw\,$videoHeight/ih))/2";
+		if ( $attribs['ken-burns-effect'] ) {
+			$sceneDuration = self::getSceneDuration( $imageTitle, $imageText, $attribs, $parser );
+			$sceneFPS = 25; // FFmpeg default
+			$filter .= ",scale=8000:-1"; // Avoids jerky motion, see https://trac.ffmpeg.org/ticket/4298
+			$filter .= ",zoompan=z=(zoom+0.001):x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=$sceneDuration*$sceneFPS:s=$videoWidth\x$videoHeight";
+		}
+		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$imagePath' -vsync vfr -pix_fmt yuv420p -filter:v '$filter' $scenePath";
+		//echo $command; exit; // Uncomment to debug
+		exec( $command, $output );
+		//var_dump( $output ); exit; // Uncomment to debug
+		unlink( $sceneConcatFile ); // Clean up
+
+		return $sceneID;
 	}
 
 	/**
@@ -118,8 +153,8 @@ class WikiVideosFactory {
 	public static function makeTrack( array $images, array $attribs, Parser $parser ) {
 		global $wgUploadDirectory;
 
-		// Make the track ID out of the elements that define the track
-		// so if nothing relevant changes, we don't regenerate the track
+		// Make track ID out of the elements that define the track
+		// so if nothing relevant changes, we can reuse the existing track
 		$trackElements = [];
         foreach ( $images as [ $imageTitle, $imageText ] ) {
             $trackElements[] = trim( $imageText );
@@ -149,6 +184,112 @@ class WikiVideosFactory {
 		}
 		file_put_contents( $trackPath, $trackText );
 		return $trackID;
+	}
+
+	/**
+	 * Make audio by using Google's text-to-speech service
+	 * 
+	 * @param string $text Text to convert
+	 * @param array $attribs Gallery attributes
+	 * @param Parser $parser
+	 * @return string ID of the audio file
+	 */
+	public static function makeAudio( string $text, array $attribs, Parser $parser ) {
+		global $wgUploadDirectory,
+			$wgFFmpegLocation,
+			$wgGoogleCloudCredentials,
+			$wgLanguageCode,
+			$wgWikiVideosVoiceGender,
+			$wgWikiVideosVoiceName;
+
+		$plainText = self::getPlainText( $text, $parser );
+		$voiceLanguage = $attribs['voice-language'];
+		$voiceGender = $attribs['voice-gender'];
+		$voiceName = $attribs['voice-name'];
+
+		// @todo Use page language instead
+		if ( !$voiceLanguage ) {
+			$voiceLanguage = $wgLanguageCode;
+		}
+
+		// @todo i18n
+		switch ( strtolower( $voiceGender ) ) {
+			case 'male':
+				$voiceGender = 1;
+			case 'female':
+				$voiceGender = 2;
+		}
+
+		// Make audio ID out of the elements that define the audio
+		// so if nothing relevant changes, we can reuse the existing audio
+		$audioID = md5( json_encode( [ $plainText, $voiceLanguage, $voiceGender, $voiceName ] ) );
+		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+		if ( file_exists( $audioPath ) ) {
+			return $audioID;
+		}
+
+		// Do the request to the Google Text-to-Speech API
+		$GoogleTextToSpeechClient = new TextToSpeechClient( [
+			'credentials' => $wgGoogleCloudCredentials
+		] );
+		$input = new SynthesisInput();
+		$input->setText( $plainText );
+		$voice = new VoiceSelectionParams();
+		$voice->setLanguageCode( $voiceLanguage );
+		if ( $voiceGender ) {
+			$voice->setSsmlGender( $voiceGender );
+		}
+		if ( $voiceName ) {
+			$voice->setName( $voiceName );
+		}
+		$audioConfig = new AudioConfig();
+		$audioConfig->setAudioEncoding( AudioEncoding::MP3 );
+		$response = $GoogleTextToSpeechClient->synthesizeSpeech( $input, $voice, $audioConfig );
+
+		// Save the audio file
+		file_put_contents( $audioPath, $response->getAudioContent() );
+
+		// Return the id of the audio file
+		return $audioID;
+	}
+
+	/**
+	 * Make silent audio file
+	 * 
+	 * @param float $duration Duration of the silent audio
+	 * @return string ID of the resulting silent audio file
+	 */
+	public static function makeSilentAudio( float $duration ) {
+		global $wgUploadDirectory, $wgFFmpegLocation;
+		$audioID = md5( $duration );
+		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+		if ( !file_exists( $audioPath ) ) {
+			exec( "$wgFFmpegLocation -f lavfi -i anullsrc=r=44100:cl=mono -t $duration -q:a 9 -acodec libmp3lame $audioPath" );
+		}
+		return $audioID;
+	}
+
+	/**
+	 * Get scene size
+	 * 
+	 * @param Title $imageTitle Image title, may be local or remote, JPG, PNG, GIF, WEBM, etc.
+	 * @return array Scene width and height, may be larger than final video size
+	 */
+	public static function getSceneSize( Title $imageTitle ) {
+		global $wgUploadDirectory;
+
+		$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
+		if ( $imageFile ) {
+			$imageRel = $imageFile->getRel();
+			$imagePath = "$wgUploadDirectory/$imageRel";
+		} else {
+			$imageID = self::getRemoteFile( $imageTitle );
+			$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageID";
+		}
+		$imageSize = getimagesize( $imagePath );
+		$imageWidth = $imageSize[0];
+		$imageHeight = $imageSize[1];
+		return [ $imageWidth, $imageHeight ];
 	}
 
 	/**
@@ -197,90 +338,7 @@ class WikiVideosFactory {
 	}
 
 	/**
-	 * Make a silent audio file
-	 * 
-	 * @param float $duration Duration of the silent audio
-	 * @return string ID of the resulting silent audio file
-	 */
-	public static function makeSilentAudio( float $duration ) {
-		global $wgUploadDirectory, $wgFFmpegLocation;
-		$audioID = md5( $duration );
-		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
-		if ( !file_exists( $audioPath ) ) {
-			exec( "$wgFFmpegLocation -f lavfi -i anullsrc=r=44100:cl=mono -t $duration -q:a 9 -acodec libmp3lame $audioPath" );
-		}
-		return $audioID;
-	}
-
-	/**
-	 * Make audio by using Google's text-to-speech service
-	 * 
-	 * @param string $text Text to convert
-	 * @param array $attribs Gallery attributes
-	 * @param Parser $parser
-	 * @return string ID of the audio file
-	 */
-	public static function makeAudio( string $text, array $attribs, Parser $parser ) {
-		global $wgUploadDirectory,
-			$wgFFmpegLocation,
-			$wgGoogleCloudCredentials,
-			$wgLanguageCode,
-			$wgWikiVideosVoiceGender,
-			$wgWikiVideosVoiceName;
-
-		$plainText = self::getPlainText( $text, $parser );
-		$voiceLanguage = $attribs['voice-language'];
-		$voiceGender = $attribs['voice-gender'];
-		$voiceName = $attribs['voice-name'];
-
-		// @todo Use page language instead
-		if ( !$voiceLanguage ) {
-			$voiceLanguage = $wgLanguageCode;
-		}
-
-		// @todo i18n
-		switch ( strtolower( $voiceGender ) ) {
-			case 'male':
-				$voiceGender = 1;
-			case 'female':
-				$voiceGender = 2;
-		}
-
-		// Generate the audio ID out of the text and options
-		// so if nothing relevant changes, we reuse existing audio
-		$audioID = md5( json_encode( [ $plainText, $voiceLanguage, $voiceGender, $voiceName ] ) );
-		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
-		if ( file_exists( $audioPath ) ) {
-			return $audioID;
-		}
-
-		// Do the request to the Google Text-to-Speech API
-		$GoogleTextToSpeechClient = new TextToSpeechClient( [
-			'credentials' => $wgGoogleCloudCredentials
-		] );
-		$input = new SynthesisInput();
-		$input->setText( $plainText );
-		$voice = new VoiceSelectionParams();
-		$voice->setLanguageCode( $voiceLanguage );
-		if ( $voiceGender ) {
-			$voice->setSsmlGender( $voiceGender );
-		}
-		if ( $voiceName ) {
-			$voice->setName( $voiceName );
-		}
-		$audioConfig = new AudioConfig();
-		$audioConfig->setAudioEncoding( AudioEncoding::MP3 );
-		$response = $GoogleTextToSpeechClient->synthesizeSpeech( $input, $voice, $audioConfig );
-
-		// Save the audio file
-		file_put_contents( $audioPath, $response->getAudioContent() );
-
-		// Return the id of the audio file
-		return $audioID;
-	}
-
-	/**
-	 * Infer the appropriate video size out of the video contents
+	 * Get video size out of the video scenes
 	 * 
 	 * @param array $images Gallery images
 	 * @return array Video width and height
@@ -293,26 +351,20 @@ class WikiVideosFactory {
 		$videoWidth = $wgWikiVideosMinSize;
 		$videoHeight = $wgWikiVideosMinSize;
 
+		// Make the video size depend on the largest scene
 		foreach ( $images as [ $imageTitle ] ) {
-			$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
-			if ( $imageFile ) {
-				$imageRel = $imageFile->getRel();
-				$imagePath = "$wgUploadDirectory/$imageRel";
-			} else {
-				$imageKey = $imageTitle->getDBKey();
-				$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageKey";
+			$sceneSize = self::getSceneSize( $imageTitle );
+			$sceneWidth = $sceneSize[0];
+			$sceneHeight = $sceneSize[1];
+			if ( $sceneWidth > $videoWidth ) {
+				$videoWidth = $sceneWidth;
 			}
-			$imageSize = getimagesize( $imagePath );
-			$imageWidth = $imageSize[0];
-			$imageHeight = $imageSize[1];
-			if ( $imageWidth > $videoWidth ) {
-				$videoWidth = $imageWidth;
-			}
-			if ( $imageHeight > $videoHeight ) {
-				$videoHeight = $imageHeight;
+			if ( $sceneHeight > $videoHeight ) {
+				$videoHeight = $sceneHeight;
 			}
 		}
 
+		// Make sure the video size doesn't exceed the limit
 		$videoRatio = $videoWidth / $videoHeight;
 		if ( $videoWidth > $videoHeight && $videoWidth > $wgWikiVideosMaxSize ) {
 			$videoWidth = $wgWikiVideosMaxSize;
@@ -328,6 +380,7 @@ class WikiVideosFactory {
 		if ( $videoHeight % 2 ) {
 			$videoHeight--;
 		}
+
 		return [ $videoWidth, $videoHeight ];
 	}
 
@@ -354,32 +407,6 @@ class WikiVideosFactory {
 				return $imageFile->getUrl();
 			}
 		}
-	}
-
-	/**
-	 * Make chapters HTML file
-	 * 
-	 * @param array $images Gallery images
-	 * @param array $attribs Gallery attribs
-	 * @param Parser $parser
-	 * @return string HTML of the chapters
-	 */
-	public static function makeChapters( array $images, array $attribs, Parser $parser ) {
-		$list = Html::openElement( 'ol', [ 'class' => 'wikivideo-chapters' ] );
-		$seconds = 0;
-		foreach ( $images as [ $imageTitle, $imageText ] ) {
-			$time = date( 'i:s', $seconds );
-			$link = Html::element( 'a', [
-				'class' => 'wikivideo-chapter-time',
-				'data-seconds' => round( $seconds )
-			], $time );
-			$span = Html::rawElement( 'span', [ 'class' => 'wikivideo-chapter-text' ], $imageText );
-			$item = Html::rawElement( 'li', [ 'class' => 'wikivideo-chapter' ], $link . PHP_EOL . $span );
-			$list .= $item;
-			$seconds += self::getSceneDuration( $imageTitle, $imageText, $attribs, $parser );
-		}
-		$list .= Html::closeElement( 'ol' );
-		return $list;
 	}
 
 	/**
