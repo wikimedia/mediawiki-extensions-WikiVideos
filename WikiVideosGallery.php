@@ -29,6 +29,7 @@ class WikiVideosGallery extends ImageGalleryBase {
         $this->mAttribs['voice-language'] = $options['voice-language'] ?? $wgWikiVideosVoiceLanguage;
         $this->mAttribs['voice-gender'] = $options['voice-gender'] ?? $wgWikiVideosVoiceGender;
         $this->mAttribs['voice-name'] = $options['voice-name'] ?? $wgWikiVideosVoiceName;
+        $this->mAttribs['ken-burns-effect'] = $options['ken-burns-effect'] ?? false;
     }
 
 	/**
@@ -75,10 +76,23 @@ class WikiVideosGallery extends ImageGalleryBase {
 		// Make main video tag
 		$html = Html::rawElement( 'video', $videoTagAttribs, $track );
 
-		// Make chapters list
+		// Add chapters list
 		$chapters = $attribs['chapters'];
 		if ( $chapters ) {
-			$html .= WikiVideosFactory::makeChapters( $images, $attribs, $parser );
+			$html .= Html::openElement( 'ol', [ 'class' => 'wikivideo-chapters' ] );
+			$seconds = 0;
+			foreach ( $images as [ $imageTitle, $imageText ] ) {
+				$time = date( 'i:s', $seconds );
+				$link = Html::element( 'a', [
+					'class' => 'wikivideo-chapter-time',
+					'data-seconds' => round( $seconds )
+				], $time );
+				$span = Html::rawElement( 'span', [ 'class' => 'wikivideo-chapter-text' ], $imageText );
+				$item = Html::rawElement( 'li', [ 'class' => 'wikivideo-chapter' ], $link . PHP_EOL . $span );
+				$html .= $item;
+				$seconds += WikiVideosFactory::getSceneDuration( $imageTitle, $imageText, $attribs, $parser );
+			}
+			$html .= Html::closeElement( 'ol' );
 		}
 
 		// Wrap everything and return
