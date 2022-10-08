@@ -12,10 +12,9 @@ use Sophivorus\EasyWiki; // Temporary dependency
  * This is the main class of the WikiVideos extension
  * Like the name suggests, it makes video files
  * It has two kinds of methods:
- * - The "make" methods to make files
- * - The "get" methods to get data needed to make files
+ * - The "make" methods make the files
+ * - The "get" methods get data needed by the make methods
  */
-
 class WikiVideosFactory {
 
 	/**
@@ -24,7 +23,7 @@ class WikiVideosFactory {
 	 * The main video is a WEBM file made by simply concatenating individual minivideos or "scenes"
 	 * Each scene is its own WEBM, made from a single file shown while the corresponding text is read aloud
 	 * This strategy of making videos out of scenes is mainly to support the use of mixed file types
-	 * because there's no valid ffmpeg command that will make a video out of a soup of mixed file types
+	 * because there's no valid FFmpeg command that will make a video out of a soup of mixed file types
 	 * Another very important reason is to avoid re-encoding everything when a single scene changes
 	 * 
 	 * @param array $images Gallery images
@@ -45,8 +44,7 @@ class WikiVideosFactory {
             $scenes[] = $scenePath;
         }
 
-		// Make video hash out of the defining elements of the video
-		// so we can reuse it if nothing relevant changes
+		// If the video already exists, return immediately
 		$videoHash = md5( json_encode( $scenes ) );
 		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoHash.webm";
 		if ( file_exists( $videoPath ) ) {
@@ -54,6 +52,7 @@ class WikiVideosFactory {
 		}
 
 		// Make video by concatenating individual scenes
+		// @todo Use tmpfile()
 		$videoConcatFile = "$wgTmpDirectory/$videoHash.txt";
 		$videoConcatText = '';
         foreach ( $scenes as $scenePath ) {
@@ -62,22 +61,21 @@ class WikiVideosFactory {
 		file_put_contents( $videoConcatFile, $videoConcatText );
 		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $videoConcatFile -max_muxing_queue_size 9999 -c copy $videoPath";
 		//echo $command; exit; // Uncomment to debug
-		exec( $command, $output );
-		//var_dump( $output ); exit; // Uncomment to debug
+		exec( $command );
 		unlink( $videoConcatFile ); // Clean up
 
-		// Return relative path because it will be used in <video> tag
+		// Return relative path for <video> tag
 		return "$wgUploadPath/wikivideos/videos/$videoHash.webm";
 	}
 
 	/**
 	 * Make scene file
 	 * 
-	 * Unfortunately, the width and height of the final video are parameters of this method.
-	 * If the size of the final video changes, for example because a scene is added, then all scenes will be regenerated.
-	 * However if we don't make scenes depend on the size of the final video, then we can't just concatenate the final video, we need to re-encode it, which is absurdly slow.
-	 * Another option is to hard-code the size of the final video (like YouTube does) but this doesn't allow vertical videos or any othe aspect ratio.
-	 * Yet another option is to set the width and height of the videos from the <video> tag, but this results in mediocre files when downloaded.
+	 * Unfortunately, the width and height of the final video are parameters of this method
+	 * so if the size of the final video changes, for example because of a new scene, then all scenes will be regenerated.
+	 * However, if we don't make scenes depend on the size of the final video, then we can't just concatenate the final video, we need to re-encode it, which is absurdly slow.
+	 * Another option is to hard-code the size of the final video (like YouTube does) but this doesn't play well with vertical videos or any othe aspect ratio.
+	 * Yet another option is to set the width and height of the videos from the <video> tag, but this results in weird files when downloaded.
 	 * None is perfect.
 	 * 
 	 * @param array $image Image data
@@ -94,8 +92,7 @@ class WikiVideosFactory {
 		$audioPath = self::makeAudio( $imageText, $attribs, $parser );
         $kenBurnsEffect = $attribs['ken-burns-effect'] ? true : false;
 
-		// Make scene hash out of the defining elements of the scene
-		// so we can reuse it if nothing relevant changes
+		// If the scene already exists, return immediately
 		$sceneHash = md5( json_encode( [ $imagePath, $audioPath, $videoWidth, $videoHeight, $kenBurnsEffect ] ) );
 		$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneHash.webm";
 		if ( file_exists( $scenePath ) ) {
@@ -103,9 +100,11 @@ class WikiVideosFactory {
 		}
 
 		// Make silent audio to add before and after each scene
-		$silentAudioPath = self::makeSilentAudio( 0.5 ); // @todo Make more elegant
+		// @todo Somehow this shouldn't be necessary
+		$silentAudioPath = self::makeSilentAudio( 0.5 );
 
 		// Make scene
+		// @todo Use tmpfile()
 		$sceneConcatFile = "$wgTmpDirectory/$sceneHash.txt";
 		$sceneConcatText = "file $silentAudioPath" . PHP_EOL;
 		$sceneConcatText .= "file $audioPath" . PHP_EOL;
@@ -125,59 +124,10 @@ class WikiVideosFactory {
 		// Run the FFmpeg command
 		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$imagePath' -vsync vfr -pix_fmt yuv420p -filter:v '$filter' $scenePath";
 		//echo $command; exit; // Uncomment to debug
-		exec( $command, $output );
-		//var_dump( $output ); exit; // Uncomment to debug
+		exec( $command );
 		unlink( $sceneConcatFile ); // Clean up
 
 		return $scenePath;
-	}
-
-	/**
-	 * Make track file (subtitles)
-	 * 
-	 * @param array $images Gallery images
-	 * @param array $attribs Gallery attributes
-	 * @param Parser $parser
-	 * @return string Relative path to the track file
-	 */
-	public static function makeTrack( array $images, array $attribs, Parser $parser ) {
-		global $wgUploadDirectory, $wgUploadPath;
-
-		// @todo Take into consideration image titles too
-		$imageTexts = [];
-        foreach ( $images as [ $imageTitle, $imageText ] ) {
-            $imageTexts[] = trim( $imageText );
-        }
-
-		// Make track hash out of the defining elements of the track
-		// so we can reuse it if nothing relevant changes
-		$trackHash = md5( json_encode( $imageTexts ) );
-		$trackPath = "$wgUploadDirectory/wikivideos/tracks/$trackHash.vtt";
-		if ( file_exists( $trackPath ) ) {
-			return "$wgUploadPath/wikivideos/tracks/$trackHash.vtt";
-		}
-
-		// Make the track file
-		$trackText = 'WEBVTT';
-		$timeElapsed = 0;
-		foreach ( $images as [ $imageTitle, $imageText ] ) {
-			$sceneDuration = self::getSceneDuration( $imageTitle, $imageText, $attribs, $parser );
-			if ( $imageText ) {
-				$plainText = self::getPlainText( $imageText, $parser );
-				$trackStart = $timeElapsed;
-				$trackEnd = $timeElapsed + $sceneDuration;
-				$trackText .= PHP_EOL . PHP_EOL;
-				$trackText .= date( 'i:s.v', $trackStart );
-				$trackText .= ' --> ';
-				$trackText .= date( 'i:s.v', $trackEnd );
-				$trackText .= PHP_EOL . $plainText;
-			}
-			$timeElapsed += $sceneDuration;
-		}
-		file_put_contents( $trackPath, $trackText );
-
-		// Return relative path because it will be used in <track> tag
-		return "$wgUploadPath/wikivideos/tracks/$trackHash.vtt";
 	}
 
 	/**
@@ -214,8 +164,7 @@ class WikiVideosFactory {
 				$voiceGender = 2;
 		}
 
-		// Make audio hash out of the defining elements of the audio
-		// so we can reuse it if nothing relevant changes
+		// If the audio already exists, return immediately
 		$audioHash = md5( json_encode( [ $plainText, $voiceLanguage, $voiceGender, $voiceName ] ) );
 		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioHash.mp3";
 		if ( file_exists( $audioPath ) ) {
@@ -246,7 +195,56 @@ class WikiVideosFactory {
 	}
 
 	/**
+	 * Make track file (subtitles)
+	 * 
+	 * @param array $images Gallery images
+	 * @param array $attribs Gallery attributes
+	 * @param Parser $parser
+	 * @return string Relative path to the track file
+	 */
+	public static function makeTrack( array $images, array $attribs, Parser $parser ) {
+		global $wgUploadDirectory, $wgUploadPath;
+
+		// @todo Should include image titles too
+		$trackElements = [];
+        foreach ( $images as [ $imageTitle, $imageText ] ) {
+            $trackElements[] = trim( $imageText );
+        }
+
+		// If the track already exists, return immediately
+		$trackHash = md5( json_encode( $trackElements ) );
+		$trackPath = "$wgUploadDirectory/wikivideos/tracks/$trackHash.vtt";
+		if ( file_exists( $trackPath ) ) {
+			return "$wgUploadPath/wikivideos/tracks/$trackHash.vtt";
+		}
+
+		// Make the track file
+		$trackText = 'WEBVTT';
+		$timeElapsed = 0;
+		foreach ( $images as [ $imageTitle, $imageText ] ) {
+			$sceneDuration = self::getSceneDuration( $imageTitle, $imageText, $attribs, $parser );
+			if ( $imageText ) {
+				$plainText = self::getPlainText( $imageText, $parser );
+				$trackStart = $timeElapsed;
+				$trackEnd = $timeElapsed + $sceneDuration;
+				$trackText .= PHP_EOL . PHP_EOL;
+				$trackText .= date( 'i:s.v', $trackStart );
+				$trackText .= ' --> ';
+				$trackText .= date( 'i:s.v', $trackEnd );
+				$trackText .= PHP_EOL . $plainText;
+			}
+			$timeElapsed += $sceneDuration;
+		}
+		file_put_contents( $trackPath, $trackText );
+
+		// Return relative path for <track> tag
+		return "$wgUploadPath/wikivideos/tracks/$trackHash.vtt";
+	}
+
+	/**
 	 * Make silent audio file
+	 * 
+	 * @todo This doesn't deserve to be a make method
 	 * 
 	 * @param float $duration Duration of the silent audio
 	 * @return string Absolute path to the resulting silent audio file
