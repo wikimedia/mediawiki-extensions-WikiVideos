@@ -5,10 +5,10 @@ WikiVideos = {
 	},
 
 	jumpToTime: function ( event ) {
-		var link = $( this );
-		var seconds = link.data( 'seconds' );
-		var video = link.closest( '.wikivideo-chapters' ).prev( 'video' );
-		video[0].currentTime = seconds;
+		var $link = $( this );
+		var $video = $link.closest( '.wikivideo-chapters' ).prev( 'video' );
+		var seconds = $link.data( 'seconds' );
+		$video[0].currentTime = seconds;
 	}
 };
 

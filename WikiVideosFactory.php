@@ -8,54 +8,55 @@ use Google\Cloud\TextToSpeech\V1\TextToSpeechClient;
 use Google\Cloud\TextToSpeech\V1\VoiceSelectionParams;
 use Sophivorus\EasyWiki; // Temporary dependency
 
-class WikiVideosFactory {
+/**
+ * This is the main class of the WikiVideos extension
+ * Like the name suggests, it makes video files
+ * It has two kinds of methods:
+ * - The "make" methods to make files
+ * - The "get" methods to get data needed to make files
+ */
 
-	/**
-	 * Some values are expensive to calculate (such as video durations)
-	 * so we store the ones we'll need more than once
-	 */
-	public $cache = [];
+class WikiVideosFactory {
 
 	/**
 	 * Make video file
 	 * 
-	 * The final video is made by simply concatenating individual minivideos or "scenes"
-	 * Each scene is made up of a single file shown while the corresponding text is read aloud
+	 * The main video is a WEBM file made by simply concatenating individual minivideos or "scenes"
+	 * Each scene is its own WEBM, made from a single file shown while the corresponding text is read aloud
 	 * This strategy of making videos out of scenes is mainly to support the use of mixed file types
 	 * because there's no valid ffmpeg command that will make a video out of a soup of mixed file types
-	 * But another very important reason is to avoid re-encoding everything when a single scene is edited
+	 * Another very important reason is to avoid re-encoding everything when a single scene changes
 	 * 
 	 * @param array $images Gallery images
 	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
-	 * @return string Video ID
+	 * @return string Relative path to the video file
 	 */
 	public static function makeVideo( array $images, array $attribs, Parser $parser ) {
-		global $wgUploadDirectory,
-			$wgTmpDirectory,
-			$wgFFmpegLocation;
+		global $wgUploadDirectory, $wgUploadPath, $wgTmpDirectory, $wgFFmpegLocation;
 
-		// Make video ID out of the elements that define the video (the scenes)
-		// so if nothing relevant changes, we can reuse the existing video
-		$scenes = [];
 		$videoSize = self::getVideoSize( $images );
 		$videoWidth = $videoSize[0];
 		$videoHeight = $videoSize[1];
+
+		$scenes = [];
         foreach ( $images as [ $imageTitle, $imageText ] ) {
-            $sceneID = self::makeScene( $imageTitle, $imageText, $videoWidth, $videoHeight, $attribs, $parser );
-            $scenes[] = $sceneID;
+            $scenePath = self::makeScene( $imageTitle, $imageText, $videoWidth, $videoHeight, $attribs, $parser );
+            $scenes[] = $scenePath;
         }
-		$videoID = md5( json_encode( $scenes ) );
-		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoID.webm";
+
+		// Make video hash out of the defining elements of the video
+		// so we can reuse it if nothing relevant changes
+		$videoHash = md5( json_encode( $scenes ) );
+		$videoPath = "$wgUploadDirectory/wikivideos/videos/$videoHash.webm";
 		if ( file_exists( $videoPath ) ) {
-			return $videoID;
+			return "$wgUploadPath/wikivideos/videos/$videoHash.webm";
 		}
 
 		// Make video by concatenating individual scenes
-		$videoConcatFile = "$wgTmpDirectory/$videoID.txt";
+		$videoConcatFile = "$wgTmpDirectory/$videoHash.txt";
 		$videoConcatText = '';
-        foreach ( $scenes as $sceneID ) {
-			$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneID.webm";
+        foreach ( $scenes as $scenePath ) {
 			$videoConcatText .= "file $scenePath" . PHP_EOL;
 		}
 		file_put_contents( $videoConcatFile, $videoConcatText );
@@ -65,14 +66,15 @@ class WikiVideosFactory {
 		//var_dump( $output ); exit; // Uncomment to debug
 		unlink( $videoConcatFile ); // Clean up
 
-		return $videoID;
+		// Return relative path because it will be used in <video> tag
+		return "$wgUploadPath/wikivideos/videos/$videoHash.webm";
 	}
 
 	/**
 	 * Make scene file
 	 * 
 	 * Unfortunately, the width and height of the final video are parameters of this method.
-	 * So if the size of the final video changes, for example because a single scene is added, then all scenes will be regenerated.
+	 * If the size of the final video changes, for example because a scene is added, then all scenes will be regenerated.
 	 * However if we don't make scenes depend on the size of the final video, then we can't just concatenate the final video, we need to re-encode it, which is absurdly slow.
 	 * Another option is to hard-code the size of the final video (like YouTube does) but this doesn't allow vertical videos or any othe aspect ratio.
 	 * Yet another option is to set the width and height of the videos from the <video> tag, but this results in mediocre files when downloaded.
@@ -83,63 +85,51 @@ class WikiVideosFactory {
 	 * @param int $videoHeight
 	 * @param array $attribs
 	 * @param Parser $parser
-	 * @return string Scene ID
+	 * @return string Absolute path to the scene file
 	 */
 	public static function makeScene( Title $imageTitle, string $imageText, int $videoWidth, int $videoHeight, array $attribs, Parser $parser ) {
 		global $wgUploadDirectory, $wgTmpDirectory, $wgFFmpegLocation;
 
-		$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
-		if ( $imageFile ) {
-			$imageID = $imageFile->getSha1();
-			$imageRel = $imageFile->getRel();
-			$imagePath = "$wgUploadDirectory/$imageRel";
-		} else {
-			$imageID = self::getRemoteFile( $imageTitle );
-			$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageID";
-		}
+		$imagePath = self::getImagePath( $imageTitle );
+		$audioPath = self::makeAudio( $imageText, $attribs, $parser );
+        $kenBurnsEffect = $attribs['ken-burns-effect'] ? true : false;
 
-		$audioID = self::makeAudio( $imageText, $attribs, $parser );
-		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
-
-		// Make scene ID out of the elements that define the scene
-		// so if nothing relevant changes, we can reuse the existing scene
-        $sceneElements[] = $imageID;
-        $sceneElements[] = $audioID;
-        $sceneElements[] = $videoWidth;
-        $sceneElements[] = $videoHeight;
-        $sceneElements[] = $attribs['ken-burns-effect'] ? true : false;
-		$sceneID = md5( json_encode( $sceneElements ) );
-		$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneID.webm";
+		// Make scene hash out of the defining elements of the scene
+		// so we can reuse it if nothing relevant changes
+		$sceneHash = md5( json_encode( [ $imagePath, $audioPath, $videoWidth, $videoHeight, $kenBurnsEffect ] ) );
+		$scenePath = "$wgUploadDirectory/wikivideos/scenes/$sceneHash.webm";
 		if ( file_exists( $scenePath ) ) {
-			return $sceneID;
+			return $scenePath;
 		}
 
 		// Make silent audio to add before and after each scene
-		$silentAudioDuration = 0.5; // @todo Make configurable
-		$silentAudioID = self::makeSilentAudio( $silentAudioDuration );
-		$silentAudioPath = "$wgUploadDirectory/wikivideos/audios/$silentAudioID.mp3";
+		$silentAudioPath = self::makeSilentAudio( 0.5 ); // @todo Make more elegant
 
 		// Make scene
-		$sceneConcatFile = "$wgTmpDirectory/$sceneID.txt";
+		$sceneConcatFile = "$wgTmpDirectory/$sceneHash.txt";
 		$sceneConcatText = "file $silentAudioPath" . PHP_EOL;
 		$sceneConcatText .= "file $audioPath" . PHP_EOL;
 		$sceneConcatText .= "file $silentAudioPath" . PHP_EOL;
 		file_put_contents( $sceneConcatFile, $sceneConcatText );
 		$filter = "scale=iw*min($videoWidth/iw\,$videoHeight/ih):ih*min($videoWidth/iw\,$videoHeight/ih)";
 		$filter .= ",pad=$videoWidth:$videoHeight:($videoWidth-iw*min($videoWidth/iw\,$videoHeight/ih))/2:($videoHeight-ih*min($videoWidth/iw\,$videoHeight/ih))/2";
+
+		// Experimental feature, very slow!
 		if ( $attribs['ken-burns-effect'] ) {
 			$sceneDuration = self::getSceneDuration( $imageTitle, $imageText, $attribs, $parser );
 			$sceneFPS = 25; // FFmpeg default
-			$filter .= ",scale=8000:-1"; // Avoids jerky motion, see https://trac.ffmpeg.org/ticket/4298
+			$filter .= ",scale=8000:-1"; // Necessary to avoid jerky motion, see https://trac.ffmpeg.org/ticket/4298
 			$filter .= ",zoompan=z=(zoom+0.001):x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=$sceneDuration*$sceneFPS:s=$videoWidth\x$videoHeight";
 		}
+
+		// Run the FFmpeg command
 		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$imagePath' -vsync vfr -pix_fmt yuv420p -filter:v '$filter' $scenePath";
 		//echo $command; exit; // Uncomment to debug
 		exec( $command, $output );
 		//var_dump( $output ); exit; // Uncomment to debug
 		unlink( $sceneConcatFile ); // Clean up
 
-		return $sceneID;
+		return $scenePath;
 	}
 
 	/**
@@ -148,21 +138,23 @@ class WikiVideosFactory {
 	 * @param array $images Gallery images
 	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
-	 * @return string Track ID
+	 * @return string Relative path to the track file
 	 */
 	public static function makeTrack( array $images, array $attribs, Parser $parser ) {
-		global $wgUploadDirectory;
+		global $wgUploadDirectory, $wgUploadPath;
 
-		// Make track ID out of the elements that define the track
-		// so if nothing relevant changes, we can reuse the existing track
-		$trackElements = [];
+		// @todo Take into consideration image titles too
+		$imageTexts = [];
         foreach ( $images as [ $imageTitle, $imageText ] ) {
-            $trackElements[] = trim( $imageText );
+            $imageTexts[] = trim( $imageText );
         }
-		$trackID = md5( json_encode( $trackElements ) );
-		$trackPath = "$wgUploadDirectory/wikivideos/tracks/$trackID.vtt";
+
+		// Make track hash out of the defining elements of the track
+		// so we can reuse it if nothing relevant changes
+		$trackHash = md5( json_encode( $imageTexts ) );
+		$trackPath = "$wgUploadDirectory/wikivideos/tracks/$trackHash.vtt";
 		if ( file_exists( $trackPath ) ) {
-			return $trackID;
+			return "$wgUploadPath/wikivideos/tracks/$trackHash.vtt";
 		}
 
 		// Make the track file
@@ -183,7 +175,9 @@ class WikiVideosFactory {
 			$timeElapsed += $sceneDuration;
 		}
 		file_put_contents( $trackPath, $trackText );
-		return $trackID;
+
+		// Return relative path because it will be used in <track> tag
+		return "$wgUploadPath/wikivideos/tracks/$trackHash.vtt";
 	}
 
 	/**
@@ -192,7 +186,7 @@ class WikiVideosFactory {
 	 * @param string $text Text to convert
 	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
-	 * @return string ID of the audio file
+	 * @return string Absolute path to the audio file
 	 */
 	public static function makeAudio( string $text, array $attribs, Parser $parser ) {
 		global $wgUploadDirectory,
@@ -220,12 +214,12 @@ class WikiVideosFactory {
 				$voiceGender = 2;
 		}
 
-		// Make audio ID out of the elements that define the audio
-		// so if nothing relevant changes, we can reuse the existing audio
-		$audioID = md5( json_encode( [ $plainText, $voiceLanguage, $voiceGender, $voiceName ] ) );
-		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+		// Make audio hash out of the defining elements of the audio
+		// so we can reuse it if nothing relevant changes
+		$audioHash = md5( json_encode( [ $plainText, $voiceLanguage, $voiceGender, $voiceName ] ) );
+		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioHash.mp3";
 		if ( file_exists( $audioPath ) ) {
-			return $audioID;
+			return $audioPath;
 		}
 
 		// Do the request to the Google Text-to-Speech API
@@ -246,76 +240,86 @@ class WikiVideosFactory {
 		$audioConfig->setAudioEncoding( AudioEncoding::MP3 );
 		$response = $GoogleTextToSpeechClient->synthesizeSpeech( $input, $voice, $audioConfig );
 
-		// Save the audio file
+		// Save and return
 		file_put_contents( $audioPath, $response->getAudioContent() );
-
-		// Return the id of the audio file
-		return $audioID;
+		return $audioPath;
 	}
 
 	/**
 	 * Make silent audio file
 	 * 
 	 * @param float $duration Duration of the silent audio
-	 * @return string ID of the resulting silent audio file
+	 * @return string Absolute path to the resulting silent audio file
 	 */
 	public static function makeSilentAudio( float $duration ) {
 		global $wgUploadDirectory, $wgFFmpegLocation;
-		$audioID = md5( $duration );
-		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+		$audioHash = md5( $duration );
+		$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioHash.mp3";
 		if ( !file_exists( $audioPath ) ) {
 			exec( "$wgFFmpegLocation -f lavfi -i anullsrc=r=44100:cl=mono -t $duration -q:a 9 -acodec libmp3lame $audioPath" );
 		}
-		return $audioID;
+		return $audioPath;
 	}
 
 	/**
-	 * Get scene size
+	 * Get scene size (width and height)
+	 * 
+	 * The scene size is determined by the image
+	 * or by the max/min video size from the config
 	 * 
 	 * @param Title $imageTitle Image title, may be local or remote, JPG, PNG, GIF, WEBM, etc.
 	 * @return array Scene width and height, may be larger than final video size
 	 */
 	public static function getSceneSize( Title $imageTitle ) {
-		global $wgUploadDirectory;
+		global $wgUploadDirectory, $wgWikiVideosMinSize, $wgWikiVideosMaxSize;
 
-		$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
-		if ( $imageFile ) {
-			$imageRel = $imageFile->getRel();
-			$imagePath = "$wgUploadDirectory/$imageRel";
-		} else {
-			$imageID = self::getRemoteFile( $imageTitle );
-			$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageID";
-		}
+		$sceneWidth = $wgWikiVideosMinSize;
+		$sceneHeight = $wgWikiVideosMinSize;	
+
+		$imagePath = self::getImagePath( $imageTitle );
 		$imageSize = getimagesize( $imagePath );
-		$imageWidth = $imageSize[0];
-		$imageHeight = $imageSize[1];
-		return [ $imageWidth, $imageHeight ];
+		$sceneWidth = $imageSize[0];
+		$sceneHeight = $imageSize[1];
+
+		// Make sure the scene size doesn't exceed the limit
+		$sceneRatio = $sceneWidth / $sceneHeight;
+		if ( $sceneWidth > $sceneHeight && $sceneWidth > $wgWikiVideosMaxSize ) {
+			$sceneWidth = $wgWikiVideosMaxSize;
+			$sceneHeight = round( $sceneWidth * $sceneRatio );
+		}
+		if ( $sceneHeight > $sceneWidth && $sceneHeight > $wgWikiVideosMaxSize ) {
+			$sceneHeight = $wgWikiVideosMaxSize;
+			$sceneWidth = round( $sceneHeight * $sceneRatio );
+		}
+
+		// Make the scene size even
+		if ( $sceneWidth % 2 ) {
+			$sceneWidth--;
+		}
+		if ( $sceneHeight % 2 ) {
+			$sceneHeight--;
+		}
+
+		return [ $sceneWidth, $sceneHeight ];
 	}
 
 	/**
-	 * Get the duration of a scene
+	 * Get scene duration (in seconds)
 	 * 
 	 * The scene duration is determined by the audio duration
-	 * or by the file duration (whichever is longer)
+	 * or by the image duration in case it's a GIF, WEBM, etc.
+	 * (whichever is longer)
 	 * 
 	 * @param Title $imageTitle Image of the scene
 	 * @param string $imageText Text of the scene
 	 * @param array $array Gallery attributes
 	 * @param Parser $parser
-	 * @return float Duration of the scene, in seconds
+	 * @return float Duration of the scene (in seconds)
 	 */
 	public static function getSceneDuration( Title $imageTitle, string $imageText, array $attribs, Parser $parser ) {
 		global $wgUploadDirectory, $wgFFprobeLocation;
 
-		$imageDuration = 0;
-		$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
-		if ( $imageFile ) {
-			$imageRel = $imageFile->getRel();
-			$imagePath = "$wgUploadDirectory/$imageRel";
-		} else {
-			$imageKey = $imageTitle->getDBKey();
-			$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageKey";
-		}
+		$imagePath = self::getImagePath( $imageTitle );
 		$imageDuration = exec( "$wgFFprobeLocation -i $imagePath -show_format -v quiet | sed -n 's/duration=//p'" );
 		if ( $imageDuration === 'N/A' ) {
 			$imageDuration = 0;
@@ -323,8 +327,7 @@ class WikiVideosFactory {
 
 		$audioDuration = 0;
 		if ( $imageText ) {
-			$audioID = self::makeAudio( $imageText, $attribs, $parser );
-			$audioPath = "$wgUploadDirectory/wikivideos/audios/$audioID.mp3";
+			$audioPath = self::makeAudio( $imageText, $attribs, $parser );
 			$audioDuration = exec( "$wgFFprobeLocation -i $audioPath -show_format -v quiet | sed -n 's/duration=//p'" );
 		}
 
@@ -338,20 +341,20 @@ class WikiVideosFactory {
 	}
 
 	/**
-	 * Get video size out of the video scenes
+	 * Get video size (width and height)
+	 * 
+	 * The video size is determined by the largest scene
+	 * or by the min video size if there're no scenes
 	 * 
 	 * @param array $images Gallery images
 	 * @return array Video width and height
 	 */
 	public static function getVideoSize( array $images ) {
-		global $wgUploadDirectory,
-			$wgWikiVideosMinSize,
-			$wgWikiVideosMaxSize;
+		global $wgWikiVideosMinSize;
 
 		$videoWidth = $wgWikiVideosMinSize;
 		$videoHeight = $wgWikiVideosMinSize;
 
-		// Make the video size depend on the largest scene
 		foreach ( $images as [ $imageTitle ] ) {
 			$sceneSize = self::getSceneSize( $imageTitle );
 			$sceneWidth = $sceneSize[0];
@@ -364,35 +367,20 @@ class WikiVideosFactory {
 			}
 		}
 
-		// Make sure the video size doesn't exceed the limit
-		$videoRatio = $videoWidth / $videoHeight;
-		if ( $videoWidth > $videoHeight && $videoWidth > $wgWikiVideosMaxSize ) {
-			$videoWidth = $wgWikiVideosMaxSize;
-			$videoHeight = round( $videoWidth * $videoRatio );
-		}
-		if ( $videoHeight > $videoWidth && $videoHeight > $wgWikiVideosMaxSize ) {
-			$videoHeight = $wgWikiVideosMaxSize;
-			$videoWidth = round( $videoHeight * $videoRatio );
-		}
-		if ( $videoWidth % 2 ) {
-			$videoWidth--;
-		}
-		if ( $videoHeight % 2 ) {
-			$videoHeight--;
-		}
-
 		return [ $videoWidth, $videoHeight ];
 	}
 
 	/**
-	 * Get video poster out of poster argument
-	 * or out of normalized <wikivideo> contents
+	 * Get video poster
+	 * 
+	 * The video poster is determined by the poster argument
+	 * or by the first suitable image
 	 * 
 	 * @param array $attribs Gallery attribs
 	 * @param array $images Gallery images
 	 * @return string Relative URL of the video poster
 	 */
-	public static function getVideoPoster( array $attribs, array $images ) {
+	public static function getVideoPoster( array $images, array $attribs ) {
 		if ( array_key_exists( 'poster', $attribs ) ) {
 			$poster = $attribs['poster'];
 			$posterTitle = Title::newFromText( $poster, NS_FILE );
@@ -428,41 +416,50 @@ class WikiVideosFactory {
 	}
 
 	/**
-	 * Download file from Commons
-	 * 
-	 * @param Title $fileTitle Title object of the file page
-	 * @return string ID of the remote file
+	 * Get image path
+	 *
+	 * @param Title $imageTitle Title object of the file page
+	 * @return string Absolute path to the image file
 	 */
-	public static function getRemoteFile( Title $fileTitle ) {
+	public static function getImagePath( Title $imageTitle ) {
 		global $wgUploadDirectory, $wgWikiVideosUserAgent;
 
-		$fileID = $fileTitle->getDBKey();
-		$filePath = "$wgUploadDirectory/wikivideos/remote/$fileID";
-		if ( file_exists( $filePath ) ) {
-			return $fileID;
+		// @todo What if the image doesn't exist
+		$imageFile = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->findFile( $imageTitle );
+		if ( $imageFile ) {
+			$imageRel = $imageFile->getRel();
+			$imagePath = "$wgUploadDirectory/$imageRel";
+			return $imagePath;
 		}
 
-		// Get file URL
-		// @todo Use internal methods
+		// If we get to this point, the image is remote
+		$imageKey = $imageTitle->getDBKey();
+		$imagePath = "$wgUploadDirectory/wikivideos/remote/$imageKey";
+		if ( file_exists( $imagePath ) ) {
+			return $imagePath;
+		}
+
+		// Get image URL
+		// @todo Use internal methods rather then EasyWiki
 		// @todo Limit image size by $wgWikiVideosMaxSize
 		$commons = new EasyWiki( 'https://commons.wikimedia.org/w/api.php' );
 		$params = [
-		    'titles' => $fileTitle->getFullText(),
+		    'titles' => $imageTitle->getFullText(),
 		    'action' => 'query',
 		    'prop' => 'imageinfo',
 		    'iiprop' => 'url'
 		];
-		$fileURL = $commons->query( $params, 'url' );
+		$imageURL = $commons->query( $params, 'url' );
 
 		// Download file
-		$curl = curl_init( $fileURL );
-		$filePointer = fopen( $filePath, 'wb' );
-		curl_setopt( $curl, CURLOPT_FILE, $filePointer );
+		$curl = curl_init( $imageURL );
+		$imagePointer = fopen( $imagePath, 'wb' );
+		curl_setopt( $curl, CURLOPT_FILE, $imagePointer );
 		curl_setopt( $curl, CURLOPT_USERAGENT, $wgWikiVideosUserAgent );
 		curl_exec( $curl );
 		curl_close( $curl );
-		fclose( $filePointer );
+		fclose( $imagePointer );
 
-		return $fileID;
+		return $imagePath;
 	}
 }
