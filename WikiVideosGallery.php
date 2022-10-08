@@ -38,24 +38,23 @@ class WikiVideosGallery extends ImageGalleryBase {
     public function toHTML() {
         global $wgUploadPath;
 
-		// Set useful variables
+		// Set basic variables
 		$parser = $this->mParser;
 		$images = $this->mImages;
 		$attribs = $this->mAttribs;
 
 		// Make video file
-		$videoID = WikiVideosFactory::makeVideo( $images, $attribs, $parser );
-		if ( !$videoID ) {
+		$videoPath = WikiVideosFactory::makeVideo( $images, $attribs, $parser );
+		if ( !$videoPath ) {
 			return Html::element( 'div', [ 'class' => 'error' ], wfMessage( 'wikivideos-error' ) );
 		}
 
-		// Define video tag attributes
+		// Set video tag attributes
 		$videoSize = WikiVideosFactory::getVideoSize( $images );
 		$videoWidth = $videoSize[0];
 		$videoHeight = $videoSize[1];
 		$videoTagAttribs = [
-			'id' => $videoID,
-			'src' => "$wgUploadPath/wikivideos/videos/$videoID.webm",
+			'src' => $videoPath,
 			'class' => 'wikivideo',
 			'width' => $attribs['width'] ?? ( $videoWidth > $videoHeight ? $videoWidth : 'auto' ),
 			'height' => $attribs['height'] ?? ( $videoHeight > $videoWidth ? $videoHeight : 'auto' ),
@@ -66,27 +65,24 @@ class WikiVideosGallery extends ImageGalleryBase {
 
 		// Make track tag
 		$captions = $attribs['captions'];
-		$trackID = WikiVideosFactory::makeTrack( $images, $attribs, $parser );
+		$trackPath = WikiVideosFactory::makeTrack( $images, $attribs, $parser );
 		$track = Html::element( 'track', [
 			'default' => $captions ? true : false,
 			'kind' => 'captions',
-			'src' => "$wgUploadPath/wikivideos/tracks/$trackID.vtt"
+			'src' => $trackPath
 		] );
 
-		// Make main video tag
+		// Make video tag
 		$html = Html::rawElement( 'video', $videoTagAttribs, $track );
 
-		// Add chapters list
+		// Make chapters list
 		$chapters = $attribs['chapters'];
 		if ( $chapters ) {
 			$html .= Html::openElement( 'ol', [ 'class' => 'wikivideo-chapters' ] );
 			$seconds = 0;
 			foreach ( $images as [ $imageTitle, $imageText ] ) {
 				$time = date( 'i:s', $seconds );
-				$link = Html::element( 'a', [
-					'class' => 'wikivideo-chapter-time',
-					'data-seconds' => round( $seconds )
-				], $time );
+				$link = Html::element( 'a', [ 'class' => 'wikivideo-chapter-time', 'data-seconds' => round( $seconds ) ], $time );
 				$span = Html::rawElement( 'span', [ 'class' => 'wikivideo-chapter-text' ], $imageText );
 				$item = Html::rawElement( 'li', [ 'class' => 'wikivideo-chapter' ], $link . PHP_EOL . $span );
 				$html .= $item;
@@ -95,7 +91,7 @@ class WikiVideosGallery extends ImageGalleryBase {
 			$html .= Html::closeElement( 'ol' );
 		}
 
-		// Wrap everything and return
+		// Make wrapper and return
 		$html = Html::rawElement( 'div', [ 'class' => 'wikivideo-wrapper' ], $html );
 		return $html;
     }
