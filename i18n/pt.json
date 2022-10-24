@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Hamilton Abreu"
+		]
+	},
+	"wikivideos-desc": "Converter texto wiki em vídeos.",
+	"wikivideos-error": "Ocorreu um erro na criação do vídeo!"
+}
