@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"McDutchie"
+		]
+	},
+	"wikivideos-desc": "Converte wikitexto in videos.",
+	"wikivideos-error": "Un problema occurreva durante le creation del video."
+}
