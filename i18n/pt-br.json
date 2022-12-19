@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Fúlvio"
+		]
+	},
+	"wikivideos-desc": "Transforma wikitexto em vídeos.",
+	"wikivideos-error": "Algo deu errado ao gerar o vídeo."
+}
