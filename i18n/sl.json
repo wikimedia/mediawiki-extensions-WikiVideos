@@ -4,5 +4,6 @@
 			"Eleassar"
 		]
 	},
-	"wikivideos-desc": "Pretvori vikibesedilo v videe."
+	"wikivideos-desc": "Pretvori vikibesedilo v videe.",
+	"wikivideos-error": "Pri ustvarjanju videa je šlo nekaj narobe."
 }
