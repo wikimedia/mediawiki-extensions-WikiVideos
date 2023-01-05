@@ -20,7 +20,7 @@ class WikiVideosHooks {
 
 	/**
 	 * Complete the extension installation by creating the necessary directories
-	 * 
+	 *
 	 * @note When debugging in a dev wiki, delete the main directory to start from scratch
 	 */
 	public static function onBeforeInitialize() {

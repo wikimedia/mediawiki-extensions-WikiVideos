@@ -11,32 +11,36 @@ class WikiVideosGallery extends ImageGalleryBase {
 
 	/**
 	 * Register additional gallery options along with their defaults
+	 *
+	 * @param array $options
 	 */
-    public function setAdditionalOptions( $options ) {
-        global $wgWikiVideosControls,
-        	$wgWikiVideosAutoplay,
-        	$wgWikiVideosCaptions,
-        	$wgWikiVideosChapters,
-        	$wgWikiVideosVoiceLanguage,
-        	$wgWikiVideosVoiceGender,
-        	$wgWikiVideosVoiceName;
-        $this->mAttribs['width'] = $options['width'] ?? null;
-        $this->mAttribs['height'] = $options['height'] ?? null;
-        $this->mAttribs['controls'] = $options['controls'] ?? $wgWikiVideosControls;
-        $this->mAttribs['autoplay'] = $options['autoplay'] ?? $wgWikiVideosAutoplay;
-        $this->mAttribs['captions'] = $options['captions'] ?? $wgWikiVideosCaptions;
-        $this->mAttribs['chapters'] = $options['chapters'] ?? $wgWikiVideosChapters;
-        $this->mAttribs['voice-language'] = $options['voice-language'] ?? $wgWikiVideosVoiceLanguage;
-        $this->mAttribs['voice-gender'] = $options['voice-gender'] ?? $wgWikiVideosVoiceGender;
-        $this->mAttribs['voice-name'] = $options['voice-name'] ?? $wgWikiVideosVoiceName;
-        $this->mAttribs['ken-burns-effect'] = $options['ken-burns-effect'] ?? false;
-    }
+	public function setAdditionalOptions( $options ) {
+		global $wgWikiVideosControls,
+			$wgWikiVideosAutoplay,
+			$wgWikiVideosCaptions,
+			$wgWikiVideosChapters,
+			$wgWikiVideosVoiceLanguage,
+			$wgWikiVideosVoiceGender,
+			$wgWikiVideosVoiceName;
+		$this->mAttribs['width'] = $options['width'] ?? null;
+		$this->mAttribs['height'] = $options['height'] ?? null;
+		$this->mAttribs['controls'] = $options['controls'] ?? $wgWikiVideosControls;
+		$this->mAttribs['autoplay'] = $options['autoplay'] ?? $wgWikiVideosAutoplay;
+		$this->mAttribs['captions'] = $options['captions'] ?? $wgWikiVideosCaptions;
+		$this->mAttribs['chapters'] = $options['chapters'] ?? $wgWikiVideosChapters;
+		$this->mAttribs['voice-language'] = $options['voice-language'] ?? $wgWikiVideosVoiceLanguage;
+		$this->mAttribs['voice-gender'] = $options['voice-gender'] ?? $wgWikiVideosVoiceGender;
+		$this->mAttribs['voice-name'] = $options['voice-name'] ?? $wgWikiVideosVoiceName;
+		$this->mAttribs['ken-burns-effect'] = $options['ken-burns-effect'] ?? false;
+	}
 
 	/**
 	 * Output the main <video> tag and supporting HTML
+	 *
+	 * @return string
 	 */
-    public function toHTML() {
-        global $wgUploadPath;
+	public function toHTML(): string {
+		global $wgUploadPath;
 
 		// Set basic variables
 		$parser = $this->mParser;
@@ -67,7 +71,7 @@ class WikiVideosGallery extends ImageGalleryBase {
 		$captions = $attribs['captions'];
 		$trackPath = WikiVideosFactory::makeTrack( $images, $attribs, $parser );
 		$track = Html::element( 'track', [
-			'default' => $captions ? true : false,
+			'default' => (bool)$captions,
 			'kind' => 'captions',
 			'src' => $trackPath
 		] );
@@ -94,5 +98,5 @@ class WikiVideosGallery extends ImageGalleryBase {
 		// Make wrapper and return
 		$html = Html::rawElement( 'div', [ 'class' => 'wikivideo-wrapper' ], $html );
 		return $html;
-    }
+	}
 }

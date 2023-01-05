@@ -1,12 +1,13 @@
 <?php
 
-use MediaWiki\MediaWikiServices;
 use Google\Cloud\TextToSpeech\V1\AudioConfig;
 use Google\Cloud\TextToSpeech\V1\AudioEncoding;
 use Google\Cloud\TextToSpeech\V1\SynthesisInput;
 use Google\Cloud\TextToSpeech\V1\TextToSpeechClient;
 use Google\Cloud\TextToSpeech\V1\VoiceSelectionParams;
-use Sophivorus\EasyWiki; // Temporary dependency
+use MediaWiki\MediaWikiServices;
+// Temporary dependency
+use Sophivorus\EasyWiki;
 
 /**
  * This is the main class of the WikiVideos extension
@@ -19,13 +20,13 @@ class WikiVideosFactory {
 
 	/**
 	 * Make video file
-	 * 
+	 *
 	 * The main video is a WEBM file made by simply concatenating individual minivideos or "scenes"
 	 * Each scene is its own WEBM, made from a single file shown while the corresponding text is read aloud
 	 * This strategy of making videos out of scenes is mainly to support the use of mixed file types
 	 * because there's no valid FFmpeg command that will make a video out of a soup of mixed file types
 	 * Another very important reason is to avoid re-encoding everything when a single scene changes
-	 * 
+	 *
 	 * @param array $images Gallery images
 	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
@@ -39,10 +40,10 @@ class WikiVideosFactory {
 		$videoHeight = $videoSize[1];
 
 		$scenes = [];
-        foreach ( $images as [ $imageTitle, $imageText ] ) {
-            $scenePath = self::makeScene( $imageTitle, $imageText, $videoWidth, $videoHeight, $attribs, $parser );
-            $scenes[] = $scenePath;
-        }
+		foreach ( $images as [ $imageTitle, $imageText ] ) {
+			$scenePath = self::makeScene( $imageTitle, $imageText, $videoWidth, $videoHeight, $attribs, $parser );
+			$scenes[] = $scenePath;
+		}
 
 		// If the video already exists, return immediately
 		$videoHash = md5( json_encode( $scenes ) );
@@ -55,12 +56,12 @@ class WikiVideosFactory {
 		// @todo Use tmpfile()
 		$videoConcatFile = "$wgTmpDirectory/$videoHash.txt";
 		$videoConcatText = '';
-        foreach ( $scenes as $scenePath ) {
+		foreach ( $scenes as $scenePath ) {
 			$videoConcatText .= "file $scenePath" . PHP_EOL;
 		}
 		file_put_contents( $videoConcatFile, $videoConcatText );
 		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $videoConcatFile -max_muxing_queue_size 9999 -c copy $videoPath";
-		//echo $command; exit; // Uncomment to debug
+		// echo $command; exit; // Uncomment to debug
 		exec( $command );
 		unlink( $videoConcatFile ); // Clean up
 
@@ -70,15 +71,16 @@ class WikiVideosFactory {
 
 	/**
 	 * Make scene file
-	 * 
+	 *
 	 * Unfortunately, the width and height of the final video are parameters of this method
 	 * so if the size of the final video changes, for example because of a new scene, then all scenes will be regenerated.
 	 * However, if we don't make scenes depend on the size of the final video, then we can't just concatenate the final video, we need to re-encode it, which is absurdly slow.
 	 * Another option is to hard-code the size of the final video (like YouTube does) but this doesn't play well with vertical videos or any othe aspect ratio.
 	 * Yet another option is to set the width and height of the videos from the <video> tag, but this results in weird files when downloaded.
 	 * None is perfect.
-	 * 
-	 * @param array $image Image data
+	 *
+	 * @param Title $imageTitle
+	 * @param string $imageText
 	 * @param int $videoWidth
 	 * @param int $videoHeight
 	 * @param array $attribs
@@ -90,7 +92,7 @@ class WikiVideosFactory {
 
 		$imagePath = self::getImagePath( $imageTitle );
 		$audioPath = self::makeAudio( $imageText, $attribs, $parser );
-        $kenBurnsEffect = $attribs['ken-burns-effect'] ? true : false;
+		$kenBurnsEffect = (bool)$attribs['ken-burns-effect'];
 
 		// If the scene already exists, return immediately
 		$sceneHash = md5( json_encode( [ $imagePath, $audioPath, $videoWidth, $videoHeight, $kenBurnsEffect ] ) );
@@ -123,7 +125,7 @@ class WikiVideosFactory {
 
 		// Run the FFmpeg command
 		$command = "$wgFFmpegLocation -y -safe 0 -f concat -i $sceneConcatFile -i '$imagePath' -vsync vfr -pix_fmt yuv420p -filter:v '$filter' $scenePath";
-		//echo $command; exit; // Uncomment to debug
+		// echo $command; exit; // Uncomment to debug
 		exec( $command );
 		unlink( $sceneConcatFile ); // Clean up
 
@@ -132,7 +134,7 @@ class WikiVideosFactory {
 
 	/**
 	 * Make audio by using Google's text-to-speech service
-	 * 
+	 *
 	 * @param string $text Text to convert
 	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
@@ -158,6 +160,7 @@ class WikiVideosFactory {
 
 		// @todo i18n
 		switch ( strtolower( $voiceGender ) ) {
+			// phpcs:ignore PSR2.ControlStructures.SwitchDeclaration.TerminatingComment
 			case 'male':
 				$voiceGender = 1;
 			case 'female':
@@ -196,7 +199,7 @@ class WikiVideosFactory {
 
 	/**
 	 * Make track file (subtitles)
-	 * 
+	 *
 	 * @param array $images Gallery images
 	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
@@ -207,9 +210,9 @@ class WikiVideosFactory {
 
 		// @todo Should include image titles too
 		$trackElements = [];
-        foreach ( $images as [ $imageTitle, $imageText ] ) {
-            $trackElements[] = trim( $imageText );
-        }
+		foreach ( $images as [ $imageTitle, $imageText ] ) {
+			$trackElements[] = trim( $imageText );
+		}
 
 		// If the track already exists, return immediately
 		$trackHash = md5( json_encode( $trackElements ) );
@@ -243,9 +246,9 @@ class WikiVideosFactory {
 
 	/**
 	 * Make silent audio file
-	 * 
+	 *
 	 * @todo This doesn't deserve to be a make method
-	 * 
+	 *
 	 * @param float $duration Duration of the silent audio
 	 * @return string Absolute path to the resulting silent audio file
 	 */
@@ -261,10 +264,10 @@ class WikiVideosFactory {
 
 	/**
 	 * Get scene size (width and height)
-	 * 
+	 *
 	 * The scene size is determined by the image
 	 * or by the max/min video size from the config
-	 * 
+	 *
 	 * @param Title $imageTitle Image title, may be local or remote, JPG, PNG, GIF, WEBM, etc.
 	 * @return array Scene width and height, may be larger than final video size
 	 */
@@ -272,7 +275,7 @@ class WikiVideosFactory {
 		global $wgUploadDirectory, $wgWikiVideosMinSize, $wgWikiVideosMaxSize;
 
 		$sceneWidth = $wgWikiVideosMinSize;
-		$sceneHeight = $wgWikiVideosMinSize;	
+		$sceneHeight = $wgWikiVideosMinSize;
 
 		$imagePath = self::getImagePath( $imageTitle );
 		$imageSize = getimagesize( $imagePath );
@@ -303,14 +306,14 @@ class WikiVideosFactory {
 
 	/**
 	 * Get scene duration (in seconds)
-	 * 
+	 *
 	 * The scene duration is determined by the audio duration
 	 * or by the image duration in case it's a GIF, WEBM, etc.
 	 * (whichever is longer)
-	 * 
+	 *
 	 * @param Title $imageTitle Image of the scene
 	 * @param string $imageText Text of the scene
-	 * @param array $array Gallery attributes
+	 * @param array $attribs Gallery attributes
 	 * @param Parser $parser
 	 * @return float Duration of the scene (in seconds)
 	 */
@@ -340,10 +343,10 @@ class WikiVideosFactory {
 
 	/**
 	 * Get video size (width and height)
-	 * 
+	 *
 	 * The video size is determined by the largest scene
 	 * or by the min video size if there're no scenes
-	 * 
+	 *
 	 * @param array $images Gallery images
 	 * @return array Video width and height
 	 */
@@ -370,12 +373,12 @@ class WikiVideosFactory {
 
 	/**
 	 * Get video poster
-	 * 
+	 *
 	 * The video poster is determined by the poster argument
 	 * or by the first suitable image
-	 * 
-	 * @param array $attribs Gallery attribs
+	 *
 	 * @param array $images Gallery images
+	 * @param array $attribs Gallery attribs
 	 * @return string Relative URL of the video poster
 	 */
 	public static function getVideoPoster( array $images, array $attribs ) {
@@ -397,9 +400,9 @@ class WikiVideosFactory {
 
 	/**
 	 * Get plain text out of wikitext
-	 * 
+	 *
 	 * @todo Make more elegant, efficient and robust
-	 * 
+	 *
 	 * @param string $text Wikitext
 	 * @param Parser $parser
 	 * @return string Plain text
@@ -442,10 +445,10 @@ class WikiVideosFactory {
 		// @todo Limit image size by $wgWikiVideosMaxSize
 		$commons = new EasyWiki( 'https://commons.wikimedia.org/w/api.php' );
 		$params = [
-		    'titles' => $imageTitle->getFullText(),
-		    'action' => 'query',
-		    'prop' => 'imageinfo',
-		    'iiprop' => 'url'
+			'titles' => $imageTitle->getFullText(),
+			'action' => 'query',
+			'prop' => 'imageinfo',
+			'iiprop' => 'url'
 		];
 		$imageURL = $commons->query( $params, 'url' );
 
