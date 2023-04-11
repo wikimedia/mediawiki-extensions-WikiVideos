@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Jon Harald Søby"
+		]
+	},
+	"wikivideos-desc": "Gjør wikitekst til videoer.",
+	"wikivideos-error": "Noe gikk galt da videoen ble laget."
+}
