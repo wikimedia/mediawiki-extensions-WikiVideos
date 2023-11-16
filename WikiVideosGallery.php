@@ -6,7 +6,6 @@
  * and the native parsing of gallery contents provided by MediaWiki.
  * However, in the future they may get their own <wikivideo> tag
  */
-
 class WikiVideosGallery extends ImageGalleryBase {
 
 	/**
@@ -85,7 +84,7 @@ class WikiVideosGallery extends ImageGalleryBase {
 			$html .= Html::openElement( 'ol', [ 'class' => 'wikivideo-chapters' ] );
 			$seconds = 0;
 			foreach ( $images as [ $imageTitle, $imageText ] ) {
-				$time = date( 'i:s', $seconds );
+				$time = date( 'i:s', floor( $seconds ) );
 				$link = Html::element( 'a', [ 'class' => 'wikivideo-chapter-time', 'data-seconds' => round( $seconds ) ], $time );
 				$span = Html::rawElement( 'span', [ 'class' => 'wikivideo-chapter-text' ], $imageText );
 				$item = Html::rawElement( 'li', [ 'class' => 'wikivideo-chapter' ], $link . PHP_EOL . $span );
