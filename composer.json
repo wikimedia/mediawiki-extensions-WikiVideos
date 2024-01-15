@@ -1,7 +1,6 @@
 {
 	"require": {
-		"google/cloud-text-to-speech": "1.4.2",
-		"sophivorus/easy-wiki": "^1.0"
+		"google/cloud-text-to-speech": "1.4.2"
 	},
 	"require-dev": {
 		"mediawiki/mediawiki-codesniffer": "41.0.0",

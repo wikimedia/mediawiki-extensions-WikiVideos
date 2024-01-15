@@ -6,8 +6,6 @@ use Google\Cloud\TextToSpeech\V1\SynthesisInput;
 use Google\Cloud\TextToSpeech\V1\TextToSpeechClient;
 use Google\Cloud\TextToSpeech\V1\VoiceSelectionParams;
 use MediaWiki\MediaWikiServices;
-// Temporary dependency
-use Sophivorus\EasyWiki;
 
 /**
  * This is the main class of the WikiVideos extension
@@ -441,16 +439,10 @@ class WikiVideosFactory {
 		}
 
 		// Get image URL
-		// @todo Use internal methods rather then EasyWiki
+		// @todo What if the image doesn't exist in the remote repos
 		// @todo Limit image size by $wgWikiVideosMaxSize
-		$commons = new EasyWiki( 'https://commons.wikimedia.org/w/api.php' );
-		$params = [
-			'titles' => $imageTitle->getFullText(),
-			'action' => 'query',
-			'prop' => 'imageinfo',
-			'iiprop' => 'url'
-		];
-		$imageURL = $commons->query( $params, 'url' );
+		$remoteFile = MediaWikiServices::getInstance()->getRepoGroup()->findFile( $imageTitle );
+		$imageURL = $remoteFile->getFullUrl();
 
 		// Download file
 		$curl = curl_init( $imageURL );

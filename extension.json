@@ -1,11 +1,13 @@
 {
+	"manifest_version": 2,
 	"name": "WikiVideos",
-	"version": "4.2.2",
+	"version": "4.3",
 	"author": "[https://www.mediawiki.org/wiki/User:Sophivorus Sophivorus]",
 	"url": "https://www.mediawiki.org/wiki/Extension:WikiVideos",
 	"descriptionmsg": "wikivideos-desc",
 	"license-name": "GPL-3.0-or-later",
 	"type": "tag",
+	"load_composer_autoloader": true,
 	"requires": {
 		"MediaWiki": ">= 1.31.0"
 	},
@@ -49,7 +51,7 @@
 			"value": ""
 		},
 		"WikiVideosUserAgent": {
-			"value": "WikiVideos/4.2 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
+			"value": "WikiVideos/4.3 (https://www.mediawiki.org/wiki/Extension:WikiVideos)"
 		},
 		"WikiVideosMinSize": {
 			"value": 200
@@ -78,7 +80,5 @@
 		"WikiVideosVoiceName": {
 			"value": ""
 		}
-	},
-	"load_composer_autoloader": true,
-	"manifest_version": 2
+	}
 }
