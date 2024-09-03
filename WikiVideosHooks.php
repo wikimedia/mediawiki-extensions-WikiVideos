@@ -25,7 +25,7 @@ class WikiVideosHooks {
 	 */
 	public static function onBeforeInitialize() {
 		global $wgUploadDirectory;
-		if ( file_exists( "$wgUploadDirectory/wikivideos" ) ) {
+		if ( defined( 'MW_PHPUNIT_TEST' ) || file_exists( "$wgUploadDirectory/wikivideos" ) ) {
 			return;
 		}
 		mkdir( "$wgUploadDirectory/wikivideos" );

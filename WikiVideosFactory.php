@@ -71,11 +71,13 @@ class WikiVideosFactory {
 	 * Make scene file
 	 *
 	 * Unfortunately, the width and height of the final video are parameters of this method
-	 * so if the size of the final video changes, for example because of a new scene, then all scenes will be regenerated.
-	 * However, if we don't make scenes depend on the size of the final video, then we can't just concatenate the final video, we need to re-encode it, which is absurdly slow.
-	 * Another option is to hard-code the size of the final video (like YouTube does) but this doesn't play well with vertical videos or any othe aspect ratio.
-	 * Yet another option is to set the width and height of the videos from the <video> tag, but this results in weird files when downloaded.
-	 * None is perfect.
+	 * so if the size of the final video changes, for example because of a new scene, then all
+	 * scenes will be regenerated. However, if we don't make scenes depend on the size of the final
+	 * video, then we can't just concatenate the final video, we need to re-encode it, which is
+	 * absurdly slow. Another option is to hard-code the size of the final video (like YouTube does)
+	 * but this doesn't play well with vertical videos or any othe aspect ratio. Yet another option
+	 * is to set the width and height of the videos from the <video> tag, but this results in weird
+	 * files when downloaded. None is perfect.
 	 *
 	 * @param Title $imageTitle
 	 * @param string $imageText
@@ -140,11 +142,8 @@ class WikiVideosFactory {
 	 */
 	public static function makeAudio( string $text, array $attribs, Parser $parser ) {
 		global $wgUploadDirectory,
-			$wgFFmpegLocation,
 			$wgGoogleCloudCredentials,
-			$wgLanguageCode,
-			$wgWikiVideosVoiceGender,
-			$wgWikiVideosVoiceName;
+			$wgLanguageCode;
 
 		$plainText = self::getPlainText( $text, $parser );
 		$voiceLanguage = $attribs['voice-language'];
@@ -158,9 +157,9 @@ class WikiVideosFactory {
 
 		// @todo i18n
 		switch ( strtolower( $voiceGender ) ) {
-			// phpcs:ignore PSR2.ControlStructures.SwitchDeclaration.TerminatingComment
 			case 'male':
 				$voiceGender = 1;
+				break;
 			case 'female':
 				$voiceGender = 2;
 		}
@@ -270,7 +269,7 @@ class WikiVideosFactory {
 	 * @return array Scene width and height, may be larger than final video size
 	 */
 	public static function getSceneSize( Title $imageTitle ) {
-		global $wgUploadDirectory, $wgWikiVideosMinSize, $wgWikiVideosMaxSize;
+		global $wgWikiVideosMinSize, $wgWikiVideosMaxSize;
 
 		$sceneWidth = $wgWikiVideosMinSize;
 		$sceneHeight = $wgWikiVideosMinSize;
@@ -316,7 +315,7 @@ class WikiVideosFactory {
 	 * @return float Duration of the scene (in seconds)
 	 */
 	public static function getSceneDuration( Title $imageTitle, string $imageText, array $attribs, Parser $parser ) {
-		global $wgUploadDirectory, $wgFFprobeLocation;
+		global $wgFFprobeLocation;
 
 		$imagePath = self::getImagePath( $imageTitle );
 		$imageDuration = exec( "$wgFFprobeLocation -i $imagePath -show_format -v quiet | sed -n 's/duration=//p'" );

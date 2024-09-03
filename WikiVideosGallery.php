@@ -39,8 +39,6 @@ class WikiVideosGallery extends ImageGalleryBase {
 	 * @return string
 	 */
 	public function toHTML(): string {
-		global $wgUploadPath;
-
 		// Set basic variables
 		$parser = $this->mParser;
 		$images = $this->mImages;
