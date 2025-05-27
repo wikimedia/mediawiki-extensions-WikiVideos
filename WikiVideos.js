@@ -5,9 +5,9 @@ WikiVideos = {
 	},
 
 	jumpToTime: function ( event ) {
-		var $link = $( this );
-		var $video = $link.closest( '.wikivideo-chapters' ).prev( 'video' );
-		var seconds = $link.data( 'seconds' );
+		const $link = $( this );
+		const $video = $link.closest( '.wikivideo-chapters' ).prev( 'video' );
+		const seconds = $link.data( 'seconds' );
 		$video[ 0 ].currentTime = seconds;
 	}
 };
