@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"MidnightLG"
+		]
+	},
+	"wikivideos-desc": "Превращает викитекст в видео.",
+	"wikivideos-error": "Что-то пошло не так при создании видео."
+}
