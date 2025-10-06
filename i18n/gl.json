@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Toliño"
+		]
+	},
+	"wikivideos-desc": "Converte texto wiki en vídeos.",
+	"wikivideos-error": "Produciuse un erro ao crear o vídeo."
+}
