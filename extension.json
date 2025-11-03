@@ -9,7 +9,7 @@
 	"type": "tag",
 	"load_composer_autoloader": true,
 	"requires": {
-		"MediaWiki": ">= 1.31.0"
+		"MediaWiki": ">= 1.40.0"
 	},
 	"MessagesDirs": {
 		"WikiVideos": [

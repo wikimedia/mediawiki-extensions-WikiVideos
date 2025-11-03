@@ -1,5 +1,7 @@
 <?php
 
+use MediaWiki\Html\Html;
+
 /**
  * WikiVideos are currently implemented as a type of gallery
  * to take advantage of the gallery dialog provided by the visual editor
