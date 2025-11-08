@@ -1,0 +1,10 @@
+[
+	{
+		"resourceModule": "ext.WikiVideos",
+		"maxSize": null
+	},
+	{
+		"resourceModule": "ext.WikiVideos.styles",
+		"maxSize": null
+	}
+]
