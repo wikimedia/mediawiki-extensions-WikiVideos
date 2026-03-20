@@ -450,7 +450,6 @@ class WikiVideosFactory {
 		curl_setopt( $curl, CURLOPT_FILE, $imagePointer );
 		curl_setopt( $curl, CURLOPT_USERAGENT, $wgWikiVideosUserAgent );
 		curl_exec( $curl );
-		curl_close( $curl );
 		fclose( $imagePointer );
 
 		return $imagePath;
