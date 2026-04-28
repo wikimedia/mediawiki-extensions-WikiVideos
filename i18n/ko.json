@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Tensama0415"
+		]
+	},
+	"wikivideos-desc": "위키텍스트를 동영상으로 바꿉니다.",
+	"wikivideos-error": "동영상을 만들 때 문제가 생겼습니다."
+}
